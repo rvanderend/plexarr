@@ -1,0 +1,533 @@
+// PlexArr web UI (no build step): the friends' library, detail panel, downloads, activity, login and routing.
+import { $, $$, esc, store, t, bytes, dur, num, when, collate, I, api, post, toast, events } from './util.js';
+import { renderSettings } from './settings.js';
+
+export const S = {
+  route: 'library',
+  lib: null,
+  status: null,
+  dl: null,
+  f: { q: '', type: 'all', show: 'all', sort: 'added', ...store.get('filters', {}) },
+  detail: null,
+  auth: { enabled: false, loggedIn: true },
+};
+const poster = (it, w = 300) => `/api/poster/${it.server}/${it.key}?w=${w}`;
+const serverName = (id) => (S.status?.servers || []).find((s) => s.id === id)?.name || '';
+
+// --- static texts and theme ------------------------------------------------------------------
+export function applyStaticTexts() {
+  $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  $$('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); el.setAttribute('aria-label', t(el.dataset.i18nTitle)); });
+  applyTheme();
+}
+function applyTheme() {
+  const th = store.get('theme', 'auto');
+  if (th === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = th;
+  $('#theme-btn').innerHTML = th === 'light' ? I.sun : th === 'dark' ? I.moon : I.auto;
+  $('#theme-btn').title = t('theme.' + th);
+  $('#theme-btn').setAttribute('aria-label', t('theme.' + th));
+}
+$('#theme-btn').addEventListener('click', () => {
+  const order = ['auto', 'light', 'dark'];
+  store.set('theme', order[(order.indexOf(store.get('theme', 'auto')) + 1) % 3]);
+  applyTheme();
+});
+$('#logout-btn').addEventListener('click', async () => { await post('/api/auth/logout'); location.reload(); });
+
+// --- routing -------------------------------------------------------------------------------------
+const ROUTES = { downloads: 'downloads', activity: 'activity', activiteit: 'activity', settings: 'settings', instellingen: 'settings' };
+function parseHash() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  if (parts[0] === 'item') return { route: 'library', item: { kind: parts[1], server: parts[2], key: parts[3] } };
+  return { route: ROUTES[parts[0]] || 'library' };
+}
+export async function route(force = false) {
+  const { route: r, item } = parseHash();
+  const changed = force || r !== S.route || !$('#view').dataset.route;
+  S.route = r;
+  $$('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.route === r));
+  if (changed) {
+    $('#view').dataset.route = r;
+    const views = { library: renderLibrary, downloads: renderDownloads, activity: renderActivity, settings: () => renderSettings(S) };
+    await views[r]();
+    window.scrollTo(0, 0);
+  }
+  if (item) openDetail(item.kind, item.server, item.key); else closeDrawer(false);
+}
+window.addEventListener('hashchange', () => route());
+
+// ==================================================================================================
+// Library
+// ==================================================================================================
+const RES_RANK = { '480p': 1, '576p': 2, '720p': 3, '1080p': 4, '2160p': 5 };
+const resLabel = (r) => (r === '2160p' ? '4K' : r || '?');
+
+function mineBadge(it) {
+  const m = it.mine || {};
+  if (it.kind === 'movie') {
+    if (m.state === 'have') return it.better ? `<span class="badge accent">${t('mine.better')}</span>` : `<span class="badge good">${t('mine.have')}</span>`;
+    if (m.state === 'missing') return `<span class="badge warn">${t('mine.missing')}</span>`;
+    return '';
+  }
+  if (m.state === 'have') return `<span class="badge good">${t('mine.have')}</span>`;
+  if (m.state === 'partial' || m.state === 'missing') return `<span class="badge warn">${t('mine.lacking', { n: it.lacking })}</span>`;
+  return '';
+}
+
+function matches(it) {
+  const f = S.f;
+  if (f.type !== 'all' && it.kind !== f.type) return false;
+  if (f.q) {
+    const q = f.q.toLowerCase();
+    if (!it.title.toLowerCase().includes(q) && String(it.year || '') !== q) return false;
+  }
+  const st = it.mine?.state || 'none';
+  switch (f.show) {
+    case 'lacking': return it.kind === 'movie' ? st === 'missing' : (it.lacking || 0) > 0;
+    case 'better': return !!it.better;
+    case 'none': return st === 'none';
+    case 'have': return st === 'have';
+    case '4k': return it.res === '2160p';
+    default: return true;
+  }
+}
+function sorted(items) {
+  const k = S.f.sort;
+  const by = {
+    added: (a, b) => b.added - a.added,
+    title: (a, b) => collate(a.title, b.title),
+    size: (a, b) => b.size - a.size,
+    year: (a, b) => (b.year || 0) - (a.year || 0),
+  }[k] || ((a, b) => b.added - a.added);
+  return [...items].sort(by);
+}
+const saveFilters = () => store.set('filters', { type: S.f.type, show: S.f.show, sort: S.f.sort });
+
+export async function loadLibrary() { S.lib = await api('/api/library'); }
+
+async function renderLibrary() {
+  const v = $('#view');
+  if (!S.lib) {
+    v.innerHTML = `<div class="empty"><div class="spinner"></div><p>${t('lib.loading')}</p></div>`;
+    try { await loadLibrary(); } catch (e) { v.innerHTML = `<div class="empty">${t('lib.loadFailed', { err: esc(e.message) })}</div>`; return; }
+  }
+  if (!S.lib.configured) {
+    v.innerHTML = `<div class="empty">${I.server}<p>${t('lib.notConfigured')}</p><a class="btn primary" href="#/settings">${t('lib.openSettings')}</a></div>`;
+    return;
+  }
+  const f = S.f;
+  v.innerHTML = `
+    <div id="lib-banners"></div>
+    <div class="lib-head">
+      <section class="ringcard" id="lib-stats"></section>
+      <div class="lib-controls">
+        <div class="lib-search">
+          <label class="field">${I.search}<input id="q" type="search" placeholder="${t('lib.search')}" aria-label="${t('lib.search')}" value="${esc(f.q)}" autocomplete="off"></label>
+          <button class="icon-btn lg" id="refresh-btn" aria-label="${t('lib.refresh')}" title="${t('lib.refresh')}">${I.refresh}</button>
+        </div>
+        <div class="seg seg-full" id="type-seg">
+          ${[['all', t('lib.all')], ['movie', t('lib.movies')], ['show', t('lib.series')]].map(([k, l]) => `<button data-v="${k}" class="${f.type === k ? 'on' : ''}">${l}</button>`).join('')}
+        </div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>`;
+  renderBanners();
+  renderStats();
+  renderChips();
+  updateGrid();
+
+  let tm;
+  $('#q').addEventListener('input', (e) => { clearTimeout(tm); tm = setTimeout(() => { f.q = e.target.value; updateGrid(); }, 120); });
+  $('#type-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    f.type = b.dataset.v; $$('#type-seg button').forEach((x) => x.classList.toggle('on', x === b)); saveFilters(); updateGrid();
+  });
+  $('#chips').addEventListener('change', (e) => { const k = e.target.dataset.k; if (!k) return; f[k] = e.target.value; saveFilters(); renderChips(); updateGrid(); });
+  $('#chips').addEventListener('click', (e) => { const b = e.target.closest('.chip-x'); if (!b) return; f[b.dataset.k] = 'all'; saveFilters(); renderChips(); updateGrid(); });
+  $('#refresh-btn').addEventListener('click', async () => {
+    const b = $('#refresh-btn'); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
+    await post('/api/library/refresh');
+    toast(t('lib.refreshing'));
+    setTimeout(async () => { await loadLibrary(); if (S.route === 'library') renderLibrary(); }, 15000);
+  });
+  $('#grid').addEventListener('click', (e) => {
+    const tile = e.target.closest('.tile'); if (!tile) return;
+    location.hash = `#/item/${tile.dataset.kind}/${tile.dataset.server}/${tile.dataset.key}`;
+  });
+  $('#grid').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.closest('.tile')?.click(); });
+}
+
+function renderBanners() {
+  const st = S.status;
+  if (!st) return;
+  const out = [];
+  for (const s of st.servers.filter((x) => x.error)) out.push(`<div class="banner warn">${t('lib.serverError', { name: esc(s.name), err: esc(s.error) })}</div>`);
+  const apps = ['radarr', 'sonarr'].filter((a) => st[a]);
+  const inactive = apps.filter((a) => !(st.links[a] || {}).active);
+  if (apps.length && inactive.length) {
+    out.push(`<div class="banner info">${t('lib.inactive', { apps: inactive.map((a) => a[0].toUpperCase() + a.slice(1)).join(' & ') })}<a class="btn sm" href="#/settings">${t('lib.openSettings')}</a></div>`);
+  }
+  $('#lib-banners').innerHTML = out.join('');
+}
+
+function renderStats() {
+  const items = S.lib.items;
+  const movies = items.filter((i) => i.kind === 'movie'), shows = items.filter((i) => i.kind === 'show');
+  const total = items.reduce((a, i) => a + i.size, 0);
+  const lacking = movies.filter((m) => m.mine.state === 'missing').length + shows.filter((s) => (s.lacking || 0) > 0).length;
+  const better = movies.filter((m) => m.better).length;
+  const none = items.filter((i) => i.mine.state === 'none').length;
+  const servers = S.lib.servers.map((s) => esc(s.name)).join(', ');
+  $('#lib-stats').innerHTML = `
+    <div class="ring-row">
+      <div class="ring-nums">
+        <div class="legend">${I.server} ${t('lib.from', { names: servers })}</div>
+        <div class="big">${num(movies.length)} ${t('lib.moviesLc')} · ${num(shows.length)} ${t('lib.seriesLc')}</div>
+        <div class="val">${bytes(total)}${S.lib.indexedAt ? ` · ${t('lib.indexed', { when: when(S.lib.indexedAt) })}` : ''}</div>
+      </div>
+    </div>
+    <div class="ring-strip">
+      <div><div class="l">${t('lib.lacking')}</div><div class="v">${num(lacking)}</div></div>
+      <div><div class="l">${t('lib.better')}</div><div class="v">${num(better)}</div></div>
+      <div><div class="l">${t('lib.notInArr')}</div><div class="v">${num(none)}</div></div>
+    </div>`;
+}
+
+function renderChips() {
+  const f = S.f;
+  const chip = (k, title, opts, value, active) => {
+    const cur = (opts.find(([v]) => v === value) || opts[0])[1];
+    return `<span class="chip-group ${active ? 'on' : ''}">
+      <label class="chip" title="${esc(title)}"><span>${esc(cur)}</span>${I.chevDown}
+        <select data-k="${k}" aria-label="${esc(title)}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      ${active ? `<button class="chip-x" data-k="${k}" aria-label="${esc(t('chip.remove'))}">${I.x}</button>` : ''}</span>`;
+  };
+  $('#chips').innerHTML = [
+    chip('show', t('chip.show'), ['all', 'lacking', 'better', '4k', 'none', 'have'].map((k) => [k, t('show.' + k)]), f.show, f.show !== 'all'),
+    chip('sort', t('chip.sort'), ['added', 'title', 'year', 'size'].map((k) => [k, t('sort.' + k)]), f.sort, false),
+  ].join('');
+}
+
+let gridItems = [], gridShown = 0;
+function updateGrid() {
+  gridItems = sorted(S.lib.items.filter(matches));
+  gridShown = 0;
+  $('#grid').innerHTML = gridItems.length ? '' : `<div class="empty" style="grid-column:1/-1">${I.film}<p>${t('lib.none')}</p></div>`;
+  moreTiles();
+}
+function tile(it) {
+  const sub = it.kind === 'movie' ? (it.year || '') : t('lib.episodes', { n: it.episodes });
+  return `<div class="tile" tabindex="0" data-kind="${it.kind}" data-server="${esc(it.server)}" data-key="${esc(it.key)}">
+    <div class="poster">
+      <div class="ph">${esc(it.title)}</div>
+      <img loading="lazy" alt="" src="${poster(it)}" onload="this.classList.add('loaded')" onerror="this.remove()">
+      <div class="tags"><span class="badge">${resLabel(it.res)}</span>${mineBadge(it)}</div>
+      <div class="shade"><span>${bytes(it.size)}</span>${it.versions > 1 ? `<span>${t('lib.versions', { n: it.versions })}</span>` : ''}</div>
+    </div>
+    <div class="meta"><div class="title">${esc(it.title)}</div><div class="sub">${esc(sub)}</div></div>
+  </div>`;
+}
+function moreTiles() {
+  const next = gridItems.slice(gridShown, gridShown + 120);
+  gridShown += next.length;
+  $('#grid').insertAdjacentHTML('beforeend', next.map(tile).join(''));
+  if (gridShown < gridItems.length) {
+    const sentinel = document.createElement('div');
+    sentinel.style.gridColumn = '1/-1';
+    $('#grid').append(sentinel);
+    new IntersectionObserver((ents, obs) => {
+      if (ents.some((e) => e.isIntersecting)) { obs.disconnect(); sentinel.remove(); moreTiles(); }
+    }, { rootMargin: '800px' }).observe(sentinel);
+  }
+}
+
+// ==================================================================================================
+// Detail panel
+// ==================================================================================================
+async function openDetail(kind, server, key) {
+  const drawer = $('#drawer');
+  const same = S.detail && S.detail.key === key && S.detail.server === server;
+  if (!same) {
+    drawer.innerHTML = `<div class="empty" style="padding-top:120px"><div class="spinner"></div></div>`;
+    S.detail = { kind, server, key, data: null };
+  }
+  drawer.hidden = false; $('#drawer-backdrop').hidden = false; document.body.style.overflow = 'hidden';
+  try {
+    const d = await api(`/api/item/${kind}/${server}/${key}`);
+    if (!S.detail || S.detail.key !== key) return;
+    S.detail.data = d;
+    renderDetail();
+  } catch (e) {
+    drawer.innerHTML = `<button class="icon-btn close-btn" id="close-btn" aria-label="${t('common.close')}">${I.x}</button><div class="empty">${esc(e.message)}</div>`;
+    $('#close-btn').onclick = () => closeDrawer();
+  }
+}
+function closeDrawer(nav = true) {
+  if ($('#drawer').hidden) return;
+  $('#drawer').hidden = true; $('#drawer-backdrop').hidden = true; document.body.style.overflow = '';
+  S.detail = null;
+  if (nav && location.hash.startsWith('#/item')) location.hash = '#/';
+}
+$('#drawer-backdrop').addEventListener('click', () => closeDrawer());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+const why = (w) => t('why.' + w);
+function eligibleLine(el) {
+  return `<div class="res ${el.ok ? 'ok' : 'warn'}">${el.ok ? I.check : I.clock} ${el.ok ? t('el.offered', { why: why(el.why) }) : t('el.held', { why: why(el.why) })}</div>`;
+}
+function jobBadge(job) {
+  if (!job) return '';
+  const cls = { Completed: 'good', Failed: 'bad', Downloading: 'accent', Queued: '', Paused: 'warn', Deleted: '' }[job.status] ?? '';
+  return `<span class="badge ${cls}">${t('job.' + job.status)}${job.status === 'Downloading' ? ` ${job.pct}%` : ''}</span>`;
+}
+
+function renderDetail() {
+  const d = S.detail.data;
+  const m = d.meta || {};
+  const head = `
+    <button class="icon-btn close-btn" id="close-btn" aria-label="${t('common.close')}">${I.x}</button>
+    <div class="hero" style="background-image:url('${poster(d, 600)}')">
+      <img class="poster-sm" src="${poster(d, 600)}" alt="">
+      <div>
+        <h2>${esc(d.title)}</h2>
+        <div class="info">${[d.year, ...(m.genres || []), m.duration ? dur(m.duration / 1000) : ''].filter(Boolean).map(esc).join(' · ')}</div>
+        <div class="chips"><span class="badge">${I.server} ${esc(serverName(d.server))}</span></div>
+      </div>
+    </div>`;
+  const body = d.kind === 'movie' ? movieBody(d) : showBody(d);
+  $('#drawer').innerHTML = head + `<div class="drawer-body">${m.summary ? `<p class="overview" id="overview">${esc(m.summary)}</p>` : ''}${body}</div>`;
+  $('#close-btn').onclick = () => closeDrawer();
+  $('#overview')?.addEventListener('click', (e) => e.target.classList.toggle('open'));
+  $$('#drawer [data-fetch]').forEach((b) => b.addEventListener('click', () => fetchItem(b)));
+}
+
+function movieBody(d) {
+  const mine = d.mine;
+  const mineHtml = !mine
+    ? `<p class="help muted">${t('detail.notInRadarr')}</p>`
+    : mine.hasFile
+      ? `<dl class="kv"><dt>${t('detail.quality')}</dt><dd>${esc(mine.quality || '–')}</dd><dt>${t('detail.size')}</dt><dd>${bytes(mine.size)}</dd><dt>${t('detail.file')}</dt><dd class="mono">${esc(mine.file)}</dd></dl>`
+      : `<p class="help"><span class="badge warn">${t('mine.missing')}</span> ${mine.monitored ? t('detail.wanted') : t('detail.unmonitored')}</p>`;
+  const versions = d.versions.map((v) => `
+    <div class="file">
+      <span class="badge">${resLabel(v.res)}</span>
+      <div style="min-width:0">
+        <div class="name" title="${esc(v.release)}">${esc(v.release)}</div>
+        <div class="det">${[v.vcodec, v.acodec && (v.acodec + (v.channels ? ' ' + v.channels + 'ch' : '')), v.bitrate && num(v.bitrate / 1000, 1) + ' Mbps', v.container].filter(Boolean).map((x) => esc(String(x).toUpperCase())).join(' · ')}
+          ${v.synthetic ? `<span class="badge" title="${esc(v.file)}">${t('detail.synthetic')}</span>` : ''} ${jobBadge(v.job)}</div>
+      </div>
+      <div class="sz num">${bytes(v.size)}</div>
+    </div>`).join('');
+  const canFetch = mine && (!mine.hasFile || d.versions.some((v) => RES_RANK[v.res] > (RES_RANK[(mine.quality || '').match(/\d+p/)?.[0]] || 0)));
+  return `
+    <div class="section-title">${t('detail.yours')}</div>
+    <div class="card" style="padding:4px 0">${mineHtml.startsWith('<dl') ? mineHtml : `<div style="padding:12px 16px">${mineHtml}</div>`}</div>
+    <div class="section-title">${t('detail.at', { name: esc(serverName(d.server)) })}</div>
+    <div class="card"><div class="files" style="border-top:0">${versions}</div></div>
+    <div class="estimate card" style="margin-top:14px">
+      ${mine ? eligibleLine(d.eligible) : ''}
+      <div class="actions">
+        ${mine ? `<button class="btn primary" data-fetch="movie" ${canFetch ? '' : 'disabled'}>${I.download} ${t('detail.fetchRadarr')}</button>` : ''}
+      </div>
+      <div class="note">${I.eye} ${mine ? t('detail.fetchHelp') : t('detail.addFirst')}</div>
+    </div>`;
+}
+
+function showBody(d) {
+  const mine = d.mine;
+  const seasons = d.seasons.map((s) => {
+    const lack = s.episodes.filter((e) => e.mine && !e.mine.hasFile).length;
+    const size = s.episodes.reduce((a, e) => a + e.size, 0);
+    const rows = s.episodes.map((e) => `
+      <div class="file">
+        <span class="badge">E${String(e.episode).padStart(2, '0')}</span>
+        <div style="min-width:0">
+          <div class="name">${esc(e.title || '')}</div>
+          <div class="det">${resLabel(e.res)} · ${bytes(e.size)}
+            ${e.mine ? (e.mine.hasFile ? `<span class="badge good">${t('mine.have')}</span>` : `<span class="badge warn">${e.mine.monitored ? t('mine.missing') : t('mine.unmonitored')}</span>`) : ''}
+            ${jobBadge(e.job)} ${e.eligible.ok && e.mine && !e.mine.hasFile ? `<span class="badge accent" title="${esc(why(e.eligible.why))}">${t('el.short')}</span>` : ''}</div>
+        </div>
+        <div class="sz">${e.mine && !e.mine.hasFile ? `<button class="btn sm" data-fetch="episode" data-season="${s.season}" data-episode="${e.episode}">${I.download}</button>` : ''}</div>
+      </div>`).join('');
+    return `<details class="card season" ${d.seasons.length === 1 ? 'open' : ''}>
+      <summary>${I.chev.replace("<svg", "<svg class=\"chev\"")}<span>${s.season === 0 ? t('detail.specials') : t('detail.season', { n: s.season })}</span>
+        <span class="right">${t('lib.episodes', { n: s.episodes.length })} · ${bytes(size)}${lack ? ` · <span class="good">${t('detail.lack', { n: lack })}</span>` : ''}</span></summary>
+      ${lack && mine ? `<div style="padding:0 14px 12px"><button class="btn sm primary" data-fetch="season" data-season="${s.season}">${I.download} ${t('detail.fetchSeason', { n: lack })}</button></div>` : ''}
+      <div class="files">${rows}</div>
+    </details>`;
+  }).join('');
+  return `
+    <div class="section-title">${t('detail.yours')}</div>
+    <div class="card" style="padding:12px 16px">${mine ? `${esc(mine.title)} ${mine.monitored ? '' : `<span class="badge">${t('mine.unmonitored')}</span>`}` : `<span class="muted">${t('detail.notInSonarr')}</span>`}</div>
+    <div class="section-title">${t('detail.at', { name: esc(serverName(d.server)) })}</div>
+    ${seasons}
+    <p class="note muted" style="font-size:12.5px">${t('detail.fetchHelpTv')}</p>`;
+}
+
+async function fetchItem(btn) {
+  const d = S.detail.data;
+  const body = { kind: d.kind, server: d.server, key: d.key };
+  if (btn.dataset.season) body.season = +btn.dataset.season;
+  if (btn.dataset.episode) body.episode = +btn.dataset.episode;
+  btn.disabled = true;
+  try {
+    const r = await post('/api/fetch', body);
+    toast(d.kind === 'movie' ? t('toast.searchRadarr') : t('toast.searchSonarr', { n: r.count }), 'good');
+    setTimeout(() => { if (S.detail?.key === d.key) openDetail(d.kind, d.server, d.key); }, 6000);
+  } catch (e) { toast(t('err.' + e.code) !== 'err.' + e.code ? t('err.' + e.code) : e.message, 'bad'); btn.disabled = false; }
+}
+
+// ==================================================================================================
+// Downloads
+// ==================================================================================================
+async function renderDownloads() {
+  const v = $('#view');
+  if (!S.dl) v.innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
+  try { S.dl = await api('/api/downloads'); } catch (e) { v.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const d = S.dl;
+  const running = d.active.filter((j) => j.status === 'Downloading');
+  const waiting = d.active.filter((j) => j.status !== 'Downloading');
+  const speed = running.reduce((a, j) => a + j.speed, 0);
+  v.innerHTML = `
+    <div class="toolbar">
+      <div><h1 class="page">${t('dl.title')}</h1><p class="page-sub" style="margin:0">${t('dl.sub')}</p></div>
+      <span class="spacer"></span>
+      <button class="btn" id="pause-btn">${d.paused ? I.play : I.pause} ${d.paused ? t('dl.resumeAll') : t('dl.pauseAll')}</button>
+    </div>
+    ${d.paused ? `<div class="banner warn">${t('dl.paused')}</div>` : ''}
+    <div class="stats">
+      <div class="card stat feature"><div class="label">${t('dl.speed')}</div><div class="value num">${speed ? bytes(speed) + '/s' : '–'}</div><div class="sub">${t('dl.active', { n: running.length })}</div></div>
+      <div class="card stat"><div class="label">${t('dl.waiting')}</div><div class="value num">${num(waiting.length)}</div><div class="sub">${bytes(waiting.reduce((a, j) => a + j.size - j.done, 0))}</div></div>
+      <div class="card stat"><div class="label">${t('dl.total')}</div><div class="value num">${bytes(d.totals.bytes)}</div><div class="sub">${t('dl.files', { n: d.totals.count })}</div></div>
+    </div>
+    ${running.map(currentCard).join('')}
+    ${waiting.length ? `<div class="section-title">${t('dl.queue')}</div><div class="card qlist">${waiting.map(queueRow).join('')}</div>` : ''}
+    <div class="section-title">${t('dl.history')}</div>
+    ${d.done.length ? `<div class="card">${d.done.map(historyRow).join('')}</div>` : `<div class="empty">${I.inbox}<p>${t('dl.none')}</p></div>`}`;
+  $('#pause-btn').onclick = async () => { await post('/api/pause', { paused: !d.paused }); renderDownloads(); };
+  v.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', async () => {
+    if (b.dataset.act === 'delete' && !confirm(t('dl.confirmDelete'))) return;
+    await post(`/api/downloads/${b.dataset.id}/${b.dataset.act}`);
+    renderDownloads();
+  }));
+}
+const jobPoster = (j) => (j.key ? `/api/poster/${j.server}/${j.key}?w=300` : '');
+function currentCard(j) {
+  const pct = j.size ? (j.done / j.size) * 100 : 0;
+  return `<div class="card current">
+    <img class="poster-sm" src="${jobPoster(j)}" alt="" onerror="this.style.visibility='hidden'">
+    <div style="min-width:0">
+      <h3>${esc(j.label)}</h3>
+      <div class="muted" style="font-size:13.5px">${esc(j.sublabel || '')}</div>
+      <div class="stage">${I.download} ${t('job.Downloading')}${j.attempts ? ` · ${t('dl.retry', { n: j.attempts })}` : ''}</div>
+      <div class="pbar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="metrics">
+        <div class="metric"><div class="label">${t('dl.progress')}</div><div class="value num">${num(pct, 1)}%</div></div>
+        <div class="metric"><div class="label">${t('dl.done')}</div><div class="value num">${bytes(j.done)} / ${bytes(j.size)}</div></div>
+        <div class="metric"><div class="label">${t('dl.speed')}</div><div class="value num">${j.speed ? bytes(j.speed) + '/s' : '–'}</div></div>
+        <div class="metric"><div class="label">${t('dl.eta')}</div><div class="value num">${j.eta != null ? dur(j.eta) : '–'}</div></div>
+      </div>
+      <div class="mono muted" style="margin-top:10px">${esc(j.name)}</div>
+      <div class="actions">
+        <button class="btn sm" data-act="pause" data-id="${j.id}">${I.pause} ${t('dl.pause')}</button>
+        <button class="btn sm danger" data-act="delete" data-id="${j.id}">${I.trash} ${t('dl.cancel')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function queueRow(j, i) {
+  return `<div class="qrow">
+    <div class="pos">${i + 1}</div>
+    <img src="${jobPoster(j)}" alt="" onerror="this.style.visibility='hidden'">
+    <div style="min-width:0"><div class="t">${esc(j.label)} <span class="muted">${esc(j.sublabel || '')}</span></div><div class="s">${esc(j.name)}</div>
+      ${j.message ? `<div class="s" style="color:var(--warn)">${esc(j.message)}</div>` : ''}</div>
+    <div class="r">${bytes(j.size)}<br><span class="badge ${j.status === 'Paused' ? 'warn' : ''}">${t('job.' + j.status)}</span></div>
+    <div class="btns">
+      <button class="icon-btn" data-act="${j.status === 'Paused' ? 'resume' : 'pause'}" data-id="${j.id}" title="${j.status === 'Paused' ? t('dl.resume') : t('dl.pause')}">${j.status === 'Paused' ? I.play : I.pause}</button>
+      <button class="icon-btn" data-act="delete" data-id="${j.id}" title="${t('dl.cancel')}">${I.trash}</button>
+    </div>
+  </div>`;
+}
+function historyRow(j) {
+  const cls = { Completed: 'good', Failed: 'bad', Deleted: '' }[j.status] ?? '';
+  const took = j.finished && j.started ? j.finished - j.started : null;
+  return `<div class="hrow">
+    <div style="min-width:0"><div class="t">${esc(j.label)} <span class="muted">${esc(j.sublabel || '')}</span></div>
+      <div class="s mono">${esc(j.name)}</div>
+      ${j.status === 'Failed' ? `<div class="s" style="color:var(--bad)">${esc(j.message)}</div>` : ''}
+      ${j.status === 'Completed' ? `<div class="s">${j.removed ? t('dl.imported') : t('dl.waitImport')}</div>` : ''}</div>
+    <div class="r"><span class="badge ${cls}">${t('job.' + j.status)}</span><br>${bytes(j.size)}${took ? ` · ${dur(took)}` : ''}<br><span class="muted">${when(j.finished)}</span>
+      ${j.status === 'Failed' ? `<br><button class="btn sm" data-act="retry" data-id="${j.id}" style="margin-top:6px">${I.retry} ${t('dl.retryBtn')}</button>` : ''}</div>
+  </div>`;
+}
+
+// ==================================================================================================
+// Activity
+// ==================================================================================================
+async function renderActivity() {
+  const v = $('#view');
+  v.innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
+  const ev = await api('/api/events?limit=300');
+  const cls = { done: 'good', failed: 'bad', grab: 'accent', search: '', sweep: 'warn', request: 'accent', setup: '' };
+  v.innerHTML = `
+    <h1 class="page">${t('act.title')}</h1><p class="page-sub">${t('act.sub')}</p>
+    ${ev.length ? `<div class="card">${ev.map((e) => `<div class="hrow">
+      <div style="min-width:0"><div class="t" style="font-weight:550">${esc(e.text)}</div></div>
+      <div class="r"><span class="badge ${cls[e.kind] ?? ''}">${t('ev.' + e.kind)}</span><br><span class="muted">${when(e.at)}</span></div>
+    </div>`).join('')}</div>` : `<div class="empty">${I.activity}<p>${t('act.none')}</p></div>`}`;
+}
+
+// ==================================================================================================
+// Polling, login and start
+// ==================================================================================================
+async function poll() {
+  try {
+    S.status = await api('/api/status');
+    const dl = await api('/api/downloads');
+    const running = dl.active.filter((j) => j.status === 'Downloading');
+    $('#dl-count').hidden = !dl.active.length;
+    $('#dl-count').textContent = dl.active.length;
+    const mp = $('#mini-progress');
+    if (running.length) {
+      const done = running.reduce((a, j) => a + j.done, 0), size = running.reduce((a, j) => a + j.size, 0);
+      const speed = running.reduce((a, j) => a + j.speed, 0);
+      mp.hidden = false;
+      mp.innerHTML = `${I.download}<div class="bar"><i style="width:${((done / size) * 100).toFixed(1)}%"></i></div><span class="txt num">${speed ? bytes(speed) + '/s' : ''}</span>`;
+    } else mp.hidden = true;
+    if (S.route === 'downloads' && !document.hidden) { S.dl = dl; renderDownloads(); }
+  } catch { /* offline: try again later */ }
+}
+$('#mini-progress').addEventListener('click', () => { location.hash = '#/downloads'; });
+
+function renderLogin() {
+  document.body.classList.add('login-mode');
+  $('#view').innerHTML = `
+    <form class="card login" id="login-form">
+      <img src="/static/icon.svg" alt="" width="56" height="56">
+      <h1>PlexArr</h1>
+      <label>${t('login.user')}<input class="input" name="user" autocomplete="username" required></label>
+      <label>${t('login.password')}<input class="input" name="password" type="password" autocomplete="current-password" required></label>
+      <p class="login-err" id="login-err" hidden>${t('login.wrong')}</p>
+      <button class="btn primary lg" type="submit">${I.lock} ${t('login.submit')}</button>
+    </form>`;
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target), btn = $('button', e.target);
+    btn.disabled = true;
+    try { await post('/api/auth/login', { user: fd.get('user'), password: fd.get('password') }); location.reload(); } catch { $('#login-err').hidden = false; btn.disabled = false; }
+  });
+  $('input', $('#login-form')).focus();
+}
+events.addEventListener('login', () => { if (S.auth.loggedIn) { S.auth.loggedIn = false; renderLogin(); } });
+
+applyStaticTexts();
+(async () => {
+  try { S.auth = await api('/api/auth/status'); } catch { /* network error: try anyway */ }
+  if (!S.auth.loggedIn) { renderLogin(); return; }
+  $('#logout-btn').hidden = !S.auth.enabled;
+  await poll();
+  await route(true);
+  setInterval(poll, 3000);
+})();

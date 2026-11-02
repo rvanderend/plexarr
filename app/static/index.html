@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PlexArr</title>
+  <meta name="theme-color" content="#0e1016" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f6fa" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/app.css?v=1">
+  <script>
+    try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <img src="/static/icon.svg" alt="" width="28" height="28">
+      <span>PlexArr</span>
+    </a>
+    <nav class="tabs" id="tabs">
+      <a href="#/" data-route="library" data-i18n="nav.library">Library</a>
+      <a href="#/downloads" data-route="downloads"><span data-i18n="nav.downloads">Downloads</span> <span class="count" id="dl-count" hidden></span></a>
+      <a href="#/activity" data-route="activity" data-i18n="nav.activity">Activity</a>
+      <a href="#/settings" data-route="settings" data-i18n="nav.settings">Settings</a>
+    </nav>
+    <div class="topbar-right">
+      <div class="mini-progress" id="mini-progress" hidden></div>
+      <button class="icon-btn" id="theme-btn"></button>
+      <button class="icon-btn" id="logout-btn" data-i18n-title="login.logout" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" aria-modal="true" role="dialog" hidden></aside>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="/static/app.js?v=1" type="module"></script>
+</body>
+</html>
