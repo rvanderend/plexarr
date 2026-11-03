@@ -1,6 +1,7 @@
 """Fallback mode: Sonarr/Radarr only search when something is added or a download fails. Once an hour PlexArr
 asks them to search a few missing items that a friend has, so the fallback also works for things Usenet
-never had. Searches also hit your Usenet indexers, so there are only a few per hour."""
+never had. Searches also hit your Usenet indexers, so there are only a few per hour, and only for items where the
+quality profile would take the friend's version (otherwise the search can only end up on Usenet)."""
 import asyncio
 import logging
 import time
@@ -15,6 +16,17 @@ log = logging.getLogger("plexarr.sweep")
 def _due(key: str, days: int) -> bool:
     r = db.q1("SELECT at FROM sweeps WHERE key=?", (key,))
     return not r or time.time() - r["at"] > days * 86400
+
+
+async def _offer(arr, rows, profile_id: int, runtime: int) -> bool:
+    """Is a friend's version offered now, in a quality and size the profile takes?"""
+    if not rows or not (await releases.eligible(rows[0]))[0]:
+        return False
+    for row in rows:
+        title, _ = await releases.title(row)
+        if await arr.accepts(profile_id, title, row["size"] or 0, runtime):
+            return True
+    return False
 
 
 def _mark(key: str):
@@ -37,7 +49,7 @@ async def run_once() -> dict:
             if not _due(key, days):
                 continue
             rows = db.q("SELECT * FROM releases WHERE kind='movie' AND (tmdb=? OR imdb=?)", (m["tmdbId"], m.get("imdbId") or "-"))
-            if rows and (await releases.eligible(rows[0]))[0]:
+            if await _offer(RADARR, rows, m["qualityProfileId"], m.get("runtime") or 0):
                 ids.append(m["id"])
                 _mark(key)
                 done["movies"].append(m["title"])
@@ -61,9 +73,10 @@ async def run_once() -> dict:
                 key = f"episode:{tvdb}:{season}:{e['episodeNumber']}"
                 if not _due(key, days):
                     continue
-                row = db.q1("SELECT * FROM releases WHERE kind='episode' AND tvdb=? AND season=? AND episode=?",
+                rows = db.q("SELECT * FROM releases WHERE kind='episode' AND tvdb=? AND season=? AND episode=?",
                             (tvdb, season, e["episodeNumber"]))
-                if row and (await releases.eligible(row))[0]:
+                series = e.get("series") or {}
+                if await _offer(SONARR, rows, series.get("qualityProfileId"), series.get("runtime") or 0):
                     ok.append((key, e))
             if not ok:
                 continue

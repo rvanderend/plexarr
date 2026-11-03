@@ -62,6 +62,22 @@ class Arr:
     async def command(self, name: str, **body):
         return await self.req("POST", "/command", json={"name": name, **body})
 
+    async def accepts(self, profile_id: int, title: str, size: int, runtime: int) -> bool:
+        """Would the quality profile take this release? Checks the quality and the maximum size, like Sonarr/Radarr."""
+        async def profiles():
+            return {p["id"]: _allowed(p["items"]) for p in await self.get("/qualityprofile")}
+
+        async def sizes():
+            return {d["quality"]["id"]: d.get("maxSize") for d in await self.get("/qualitydefinition")}
+
+        p = await self.parse(title)
+        info = p.get("parsedMovieInfo") or p.get("parsedEpisodeInfo") or {}
+        quality = ((info.get("quality") or {}).get("quality") or {}).get("id")
+        if quality not in (await self.cached("profiles", 600, profiles)).get(profile_id, set()):
+            return False
+        max_mb = (await self.cached("sizes", 600, sizes)).get(quality)
+        return not (max_mb and runtime and size > max_mb * runtime * 1024 * 1024)
+
     # --- automatic setup ----------------------------------------------------------------------
     async def setup(self, active: bool) -> dict:
         """Creates or updates the PlexArr download client and indexer, linked to each other."""
@@ -103,6 +119,14 @@ class Arr:
         return {"indexer": bool(idx), "client": bool(cli),
                 "active": bool(idx and (idx["enableRss"] or idx["enableAutomaticSearch"])),
                 "linked": bool(idx and cli and idx.get("downloadClientId") == cli["id"])}
+
+
+def _allowed(items: list[dict]) -> set[int]:
+    out = set()
+    for it in items:
+        if it.get("allowed"):
+            out |= {i["quality"]["id"] for i in it["items"]} if it.get("items") else {it["quality"]["id"]}
+    return out
 
 
 def _fill(provider: dict, values: dict):
