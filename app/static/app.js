@@ -144,8 +144,31 @@ async function renderLibrary() {
     const b = e.target.closest('button'); if (!b) return;
     f.type = b.dataset.v; $$('#type-seg button').forEach((x) => x.classList.toggle('on', x === b)); saveFilters(); updateGrid();
   });
-  $('#chips').addEventListener('change', (e) => { const k = e.target.dataset.k; if (!k) return; f[k] = e.target.value; saveFilters(); renderChips(); updateGrid(); });
-  $('#chips').addEventListener('click', (e) => { const b = e.target.closest('.chip-x'); if (!b) return; f[b.dataset.k] = 'all'; saveFilters(); renderChips(); updateGrid(); });
+  const setChip = (k, v) => { f[k] = v; saveFilters(); renderChips(); updateGrid(); };
+  $('#chips').addEventListener('change', (e) => { if (e.target.dataset.k) setChip(e.target.dataset.k, e.target.value); });
+  $('#chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('button.chip');
+    if (chip) { toggleChipMenu(chip); return; }
+    const o = e.target.closest('.chip-menu [role="option"]');
+    if (o) {
+      const k = o.dataset.k;
+      closeChipMenu(); setChip(k, o.dataset.v);
+      $(`#chips .chip[data-k="${k}"]`)?.focus();
+      return;
+    }
+    const b = e.target.closest('.chip-x'); if (!b) return;
+    setChip(b.dataset.k, 'all');
+  });
+  $('#chips').addEventListener('keydown', (e) => {
+    const menu = e.target.closest('.chip-menu');
+    if (e.key === 'ArrowDown' && e.target.matches('button.chip')) { e.preventDefault(); toggleChipMenu(e.target, true); return; }
+    if (!menu) return;
+    const items = [...menu.querySelectorAll('[role="option"]')], i = items.indexOf(e.target);
+    const go = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+    if (go !== undefined) { e.preventDefault(); items[(go + items.length) % items.length].focus(); }
+    else if (e.key === 'Escape') { e.stopPropagation(); closeChipMenu(true); }
+    else if (e.key === 'Tab') closeChipMenu();
+  });
   $('#refresh-btn').addEventListener('click', async () => {
     const b = $('#refresh-btn'); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
     await post('/api/library/refresh');
@@ -195,13 +218,40 @@ function renderStats() {
     </div>`;
 }
 
+// With a mouse, filter chips open their own menu instead of a native <select>, whose open list can't be styled.
+function closeChipMenu(refocus = false) {
+  const menu = $('.chip-menu:not([hidden])'); if (!menu) return;
+  const chip = menu.previousElementSibling;
+  menu.hidden = true; chip.setAttribute('aria-expanded', 'false');
+  if (refocus) chip.focus();
+}
+
+function toggleChipMenu(chip, open) {
+  const menu = chip.nextElementSibling, wasOpen = !menu.hidden;
+  closeChipMenu();
+  if (wasOpen && !open) return;
+  menu.hidden = false; chip.setAttribute('aria-expanded', 'true');
+  // Align the menu right when it would stick out of the screen.
+  menu.classList.remove('end');
+  if (menu.getBoundingClientRect().right > document.documentElement.clientWidth - 8) menu.classList.add('end');
+  (menu.querySelector('[aria-selected="true"]') || menu.firstElementChild).focus();
+}
+
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.chip-group')) closeChipMenu(); });
+
 function renderChips() {
   const f = S.f;
+  // Touch screens keep the native picker (the iOS wheel); with a mouse the open list of a <select> looks out of place.
+  const native = matchMedia('(pointer: coarse)').matches;
   const chip = (k, title, opts, value, active) => {
     const cur = (opts.find(([v]) => v === value) || opts[0])[1];
+    const pick = native
+      ? `<label class="chip" title="${esc(title)}"><span>${esc(cur)}</span>${I.chevDown}
+        <select data-k="${k}" aria-label="${esc(title)}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`
+      : `<button class="chip" data-k="${k}" title="${esc(title)}" aria-label="${esc(title)}: ${esc(cur)}" aria-haspopup="listbox" aria-expanded="false"><span>${esc(cur)}</span>${I.chevDown}</button>
+      <div class="chip-menu" role="listbox" aria-label="${esc(title)}" hidden>${opts.map(([v, l]) => `<button role="option" data-k="${k}" data-v="${esc(v)}" aria-selected="${v === value}">${esc(l)}${I.check}</button>`).join('')}</div>`;
     return `<span class="chip-group ${active ? 'on' : ''}">
-      <label class="chip" title="${esc(title)}"><span>${esc(cur)}</span>${I.chevDown}
-        <select data-k="${k}" aria-label="${esc(title)}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      ${pick}
       ${active ? `<button class="chip-x" data-k="${k}" aria-label="${esc(t('chip.remove'))}">${I.x}</button>` : ''}</span>`;
   };
   $('#chips').innerHTML = [
