@@ -473,10 +473,34 @@ async function renderActivity() {
   const cls = { done: 'good', failed: 'bad', grab: 'accent', search: '', sweep: 'warn', request: 'accent', setup: '' };
   v.innerHTML = `
     <h1 class="page">${t('act.title')}</h1><p class="page-sub">${t('act.sub')}</p>
-    ${ev.length ? `<div class="card">${ev.map((e) => `<div class="hrow">
-      <div style="min-width:0"><div class="t" style="font-weight:550">${esc(e.text)}</div></div>
+    ${ev.length ? `<div class="card">${ev.map((e) => { const [line, sub] = eventText(e); return `<div class="hrow">
+      <div style="min-width:0"><div class="t" style="font-weight:550">${esc(line)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ''}</div>
       <div class="r"><span class="badge ${cls[e.kind] ?? ''}">${t('ev.' + e.kind)}</span><br><span class="muted">${when(e.at)}</span></div>
-    </div>`).join('')}</div>` : `<div class="empty">${I.activity}<p>${t('act.none')}</p></div>`}`;
+    </div>`; }).join('')}</div>` : `<div class="empty">${I.activity}<p>${t('act.none')}</p></div>`}`;
+}
+
+// [line, explanation] in the UI language. Lines logged before events carried data only have their English text.
+function eventText(e) {
+  const d = e.data;
+  if (!d) return [e.text, ''];
+  switch (e.kind) {
+    case 'search': {
+      const held = Object.entries(d.held || {});
+      const n = held.reduce((a, [, c]) => a + c, 0);
+      const reasons = held.map(([w, c]) => (held.length > 1 ? `${c}× ` : '') + why(w)).join(', ');
+      const result = [d.offered ? t('evt.offered', { n: d.offered }) : t('evt.none'), n ? t('evt.held', { n, why: reasons }) : '']
+        .filter(Boolean).join(', ');
+      return [t(d.app ? 'evt.search' : 'evt.searchAny', { app: d.app, what: d.what, result }),
+        d.offered && d.app ? t('evt.searchHelp', { app: d.app }) : ''];
+    }
+    case 'sweep': return [t('evt.sweep', { app: d.app, items: d.items.join(', ') }), t('evt.sweepHelp')];
+    case 'request': return [d.n == null ? t('evt.request', d) : t('evt.requestEps', d), ''];
+    case 'grab': return [t('evt.grab', d), d.name];
+    case 'failed': return [t('evt.failed', d), d.msg];
+    case 'done': return [t('evt.done', { what: d.what, size: bytes(d.size) }), ''];
+    case 'setup': return [t(d.active ? 'evt.setup' : 'evt.setupOff', d), ''];
+    default: return [e.text, ''];
+  }
 }
 
 // ==================================================================================================

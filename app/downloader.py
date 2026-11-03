@@ -52,7 +52,8 @@ class Downloader:
              "size, status, created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
              (nzo, server, part_id, safe_name(name), category or "*", r["kind"], label, sub, r["rating_key"],
               r["show_key"], r["size"], "Queued", time.time()))
-        db.event("grab", f"{label}{' ' + sub if sub else ''}: {name}")
+        what = f"{label}{' ' + sub if sub else ''}"
+        db.event("grab", f"{what}: {name}", what=what, name=name)
         self.wake.set()
         return nzo
 
@@ -124,7 +125,8 @@ class Downloader:
         job = db.q1("SELECT label, sublabel FROM jobs WHERE nzo_id=?", (nzo,))
         db.x("UPDATE jobs SET status='Failed', fail_message=?, finished=? WHERE nzo_id=?", (msg[:500], time.time(), nzo))
         if job:
-            db.event("failed", f"{job['label']} {job['sublabel']}: {msg}".replace("  ", " "))
+            what = f"{job['label']} {job['sublabel']}".strip()
+            db.event("failed", f"{what}: {msg}", what=what, msg=msg)
 
     async def _download(self, job):
         nzo = job["nzo_id"]
@@ -177,7 +179,8 @@ class Downloader:
         took = time.time() - (job["started"] or time.time())
         db.x("UPDATE jobs SET status='Completed', done=?, storage=?, finished=?, fail_message='' WHERE nzo_id=?",
              (size, str(final), time.time(), nzo))
-        db.event("done", f"{job['label']} {job['sublabel']}".strip() + f" ({size / 1e9:.1f} GB)")
+        what = f"{job['label']} {job['sublabel']}".strip()
+        db.event("done", f"{what} ({size / 1e9:.1f} GB)", what=what, size=size)
         log.info("done %s in %.0fs", job["name"], took)
 
     async def _sleep(self, nzo: str, seconds: float):

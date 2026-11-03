@@ -148,7 +148,9 @@ async def api(request: Request):
     if specific and rows:
         names = sorted({_label(r) for r in rows})
         what = names[0] if len(names) == 1 else f"{names[0]} (+{len(names) - 1})"
-        db.event("search", f"{what}: {len(offered)} offered" + (f", held back: {held}" if held else ""))
+        app = {"movie": "Radarr", "tvsearch": "Sonarr", "tv": "Sonarr"}.get(t)
+        db.event("search", f"{what}: {len(offered)} offered" + (f", held back: {held}" if held else ""),
+                 app=app, what=what, offered=len(offered), held=held)
     page = offered[offset:offset + limit]
 
     base = str(request.base_url).rstrip("/")

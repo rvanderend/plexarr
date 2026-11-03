@@ -1,6 +1,7 @@
 """PlexArr: download from friends' Plex servers through Sonarr and Radarr, as a Newznab indexer plus a
 SABnzbd-like download client."""
 import asyncio
+import json
 import logging
 import re
 import time
@@ -408,7 +409,8 @@ async def fetch(req: FetchReq):
         _request(releases.request_key(rows[0]))
         await RADARR.command("MoviesSearch", movieIds=[m["id"]])
         RADARR.forget("failed:")
-        db.event("request", f"{m['title']} ({m.get('year')}): search in Radarr")
+        what = f"{m['title']} ({m.get('year')})"
+        db.event("request", f"{what}: search in Radarr", app="Radarr", what=what)
         return {"ok": True, "count": 1}
     rows = db.q("SELECT * FROM releases WHERE server=? AND show_key=? AND kind='episode'", (req.server, req.key))
     if not rows:
@@ -443,7 +445,7 @@ async def fetch(req: FetchReq):
     SONARR.forget(f"episodes:{series['id']}")
     what = series["title"] + (f" S{req.season:02d}" if req.season is not None else "") + \
         (f"E{req.episode:02d}" if req.episode is not None else "")
-    db.event("request", f"{what}: {len(pick)} episode(s), search in Sonarr")
+    db.event("request", f"{what}: {len(pick)} episode(s), search in Sonarr", app="Sonarr", what=what, n=len(pick))
     return {"ok": True, "count": len(pick)}
 
 
@@ -494,7 +496,7 @@ async def pause(req: PauseReq):
 
 @app.get("/api/events")
 async def events(limit: int = 200):
-    return [{"at": r["at"], "kind": r["kind"], "text": r["text"]}
+    return [{"at": r["at"], "kind": r["kind"], "text": r["text"], "data": json.loads(r["data"]) if r["data"] else None}
             for r in db.q("SELECT * FROM events ORDER BY id DESC LIMIT ?", (min(limit, 1000),))]
 
 
@@ -633,7 +635,8 @@ async def arr_setup(req: SetupReq):
     except ArrError as e:
         raise HTTPException(400, str(e))
     a.forget("link")
-    db.event("setup", f"{req.app}: indexer + download client {'active' if req.active else 'inactive'}")
+    db.event("setup", f"{req.app}: indexer + download client {'active' if req.active else 'inactive'}",
+             app=req.app.capitalize(), active=bool(req.active))
     return out
 
 

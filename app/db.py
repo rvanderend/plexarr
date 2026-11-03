@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS requests (
 CREATE TABLE IF NOT EXISTS sweeps (key TEXT PRIMARY KEY, at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    at REAL NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL
+    at REAL NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL,
+    data TEXT                      -- JSON the web UI builds a translated line from (text is the fallback)
 );
 """
 
@@ -69,6 +70,8 @@ def conn() -> sqlite3.Connection:
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.executescript(SCHEMA)
+        if "data" not in {r["name"] for r in _conn.execute("PRAGMA table_info(events)")}:
+            _conn.execute("ALTER TABLE events ADD COLUMN data TEXT")
         # Downloads that were running when the service stopped continue where they were.
         _conn.execute("UPDATE jobs SET status='Queued' WHERE status='Downloading'")
     return _conn
@@ -128,7 +131,8 @@ def set_state(key: str, value):
       (key, json.dumps(value)))
 
 
-def event(kind: str, text: str):
+def event(kind: str, text: str, **data):
     """Activity log: searches answered, downloads, sweeps. Keeps the last 2000 lines."""
-    x("INSERT INTO events(at, kind, text) VALUES(?, ?, ?)", (time.time(), kind, text))
+    x("INSERT INTO events(at, kind, text, data) VALUES(?, ?, ?, ?)",
+      (time.time(), kind, text, json.dumps(data) if data else None))
     x("DELETE FROM events WHERE id <= (SELECT MAX(id) - 2000 FROM events)")

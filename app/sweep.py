@@ -92,8 +92,9 @@ async def run_once() -> dict:
                 budget -= len(ok)
             for key, _ in ok:
                 _mark(key)
-    if done["movies"] or done["episodes"]:
-        db.event("sweep", ", ".join(done["movies"] + done["episodes"]))
+    for app, items in (("Radarr", done["movies"]), ("Sonarr", done["episodes"])):
+        if items:
+            db.event("sweep", f"{app} searches: " + ", ".join(items), app=app, items=items)
     db.set_state("sweep_at", time.time())
     return done
 

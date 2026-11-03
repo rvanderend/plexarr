@@ -52,7 +52,14 @@ export const DICT = {
     'dl.imported': 'Picked up by Sonarr/Radarr', 'dl.waitImport': 'Waiting for Sonarr/Radarr to import it',
 
     'act.title': 'Activity', 'act.sub': 'Searches PlexArr answered, downloads and automatic searches.', 'act.none': 'Nothing happened yet.',
-    'ev.done': 'Done', 'ev.failed': 'Failed', 'ev.grab': 'Grabbed', 'ev.search': 'Search', 'ev.sweep': 'Sweep', 'ev.request': 'Request', 'ev.setup': 'Setup',
+    'ev.done': 'Done', 'ev.failed': 'Failed', 'ev.grab': 'Grabbed', 'ev.search': 'Search', 'ev.sweep': 'Auto search', 'ev.request': 'Request', 'ev.setup': 'Setup',
+    'evt.search': '{app} searched for {what}: {result}', 'evt.searchAny': 'Search for {what}: {result}',
+    'evt.offered': 'offered {n} versions', 'evt.offered.one': 'offered 1 version', 'evt.none': 'nothing offered',
+    'evt.held': 'held back {n} ({why})', 'evt.searchHelp': 'Offered versions go to {app} as search results; {app} decides whether to take one.',
+    'evt.sweep': 'PlexArr had {app} search for {items}', 'evt.sweepHelp': 'Missing from your library and a friend has it. The search also goes to your Usenet indexers.',
+    'evt.request': 'You fetched {what}: {app} searches for it', 'evt.requestEps': 'You fetched {what}: {app} searches for {n} episodes', 'evt.requestEps.one': 'You fetched {what}: {app} searches for 1 episode',
+    'evt.grab': '{what}: download from a friend started', 'evt.failed': '{what}: download failed', 'evt.done': '{what}: download finished ({size})',
+    'evt.setup': '{app}: indexer and download client switched on', 'evt.setupOff': '{app}: indexer and download client switched off',
 
     'set.sub': 'Where PlexArr fetches from and how it works with Sonarr and Radarr.',
     'set.link': 'Link with Sonarr & Radarr', 'set.behaviour': 'When PlexArr steps in', 'set.download': 'Downloading', 'set.login': 'Login',
@@ -136,7 +143,14 @@ export const DICT = {
     'dl.imported': 'Opgepikt door Sonarr/Radarr', 'dl.waitImport': 'Wacht tot Sonarr/Radarr hem importeert',
 
     'act.title': 'Activiteit', 'act.sub': 'Zoekopdrachten die PlexArr beantwoordde, downloads en automatische zoekacties.', 'act.none': 'Nog niets gebeurd.',
-    'ev.done': 'Klaar', 'ev.failed': 'Mislukt', 'ev.grab': 'Opgepakt', 'ev.search': 'Zoeken', 'ev.sweep': 'Veeg', 'ev.request': 'Aanvraag', 'ev.setup': 'Koppeling',
+    'ev.done': 'Klaar', 'ev.failed': 'Mislukt', 'ev.grab': 'Opgepakt', 'ev.search': 'Zoeken', 'ev.sweep': 'Auto-zoeken', 'ev.request': 'Aanvraag', 'ev.setup': 'Koppeling',
+    'evt.search': '{app} zocht naar {what}: {result}', 'evt.searchAny': 'Zoekopdracht naar {what}: {result}',
+    'evt.offered': '{n} versies aangeboden', 'evt.offered.one': '1 versie aangeboden', 'evt.none': 'niets aangeboden',
+    'evt.held': '{n} tegengehouden ({why})', 'evt.searchHelp': 'Aangeboden versies krijgt {app} als zoekresultaat; {app} beslist zelf of het er een neemt.',
+    'evt.sweep': 'PlexArr liet {app} zoeken naar {items}', 'evt.sweepHelp': 'Ontbreekt in je bibliotheek en een vriend heeft het. De zoekopdracht gaat ook langs je Usenet-indexers.',
+    'evt.request': 'Je haalde {what} op: {app} zoekt ernaar', 'evt.requestEps': 'Je haalde {what} op: {app} zoekt naar {n} afleveringen', 'evt.requestEps.one': 'Je haalde {what} op: {app} zoekt naar 1 aflevering',
+    'evt.grab': '{what}: download van een vriend gestart', 'evt.failed': '{what}: download mislukt', 'evt.done': '{what}: download klaar ({size})',
+    'evt.setup': '{app}: indexer en downloadclient aangezet', 'evt.setupOff': '{app}: indexer en downloadclient uitgezet',
 
     'set.sub': 'Waar PlexArr ophaalt en hoe het samenwerkt met Sonarr en Radarr.',
     'set.link': 'Koppeling met Sonarr & Radarr', 'set.behaviour': 'Wanneer PlexArr bijspringt', 'set.download': 'Downloaden', 'set.login': 'Inloggen',
