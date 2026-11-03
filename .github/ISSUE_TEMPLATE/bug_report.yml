@@ -1,0 +1,33 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is PlexArr running?
+      options:
+        - Docker image (ghcr.io/rvanderend/plexarr)
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: PlexArr (the `version` at `/api/health`), Sonarr and Radarr.
+      placeholder: "PlexArr 0.2.0, Sonarr 4.0.15, Radarr 5.28"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Output of `docker logs plexarr --tail 100`, and the lines on the Activity page if they help. Remove tokens, API keys and addresses you don't want to share."
+      render: text

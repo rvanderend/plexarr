@@ -1,0 +1,11 @@
+name: Idea
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: What should PlexArr do, and what problem does that solve for you?
+    validations:
+      required: true
