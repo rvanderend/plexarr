@@ -2,6 +2,8 @@
 import asyncio
 import logging
 import time
+import uuid
+from pathlib import Path
 
 import httpx
 
@@ -77,6 +79,17 @@ class Arr:
             return False
         max_mb = (await self.cached("sizes", 600, sizes)).get(quality)
         return not (max_mb and runtime and size > max_mb * runtime * 1024 * 1024)
+
+    async def sees(self, folder: Path) -> bool:
+        """Does Sonarr/Radarr see this folder of ours at the same path? Looks for a test file through its folder browser."""
+        probe = folder / f"plexarr-check-{uuid.uuid4().hex[:8]}.txt"
+        probe.write_text("PlexArr checks that Sonarr/Radarr see this folder. It is deleted right away.\n")
+        try:
+            d = await self.req("GET", "/filesystem", params={"path": str(folder).rstrip("/") + "/", "includeFiles": "true",
+                                                             "allowFoldersWithoutTrailingSlashes": "true"})
+            return any(f.get("name") == probe.name for f in d.get("files", []))
+        finally:
+            probe.unlink(missing_ok=True)
 
     # --- automatic setup ----------------------------------------------------------------------
     async def setup(self, active: bool) -> dict:

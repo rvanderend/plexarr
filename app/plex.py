@@ -4,6 +4,7 @@ import logging
 import re
 import time
 import uuid
+from urllib.parse import urlencode
 
 import httpx
 
@@ -43,6 +44,24 @@ async def shared_servers(token: str | None = None) -> list[dict]:
                     "online": bool(res.get("presence")), "token": res.get("accessToken") or "",
                     "connections": [c for c in res.get("connections", []) if not c.get("relay")]})
     return out
+
+
+# --- signing in with Plex (a PIN the user approves on app.plex.tv) ------------------------------------
+async def new_pin() -> dict:
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post("https://plex.tv/api/v2/pins", params={"strong": "true"}, headers=headers(""))
+        r.raise_for_status()
+    pin = r.json()
+    query = urlencode({"clientID": client_id(), "code": pin["code"], "context[device][product]": "PlexArr"})
+    return {"id": pin["id"], "url": f"https://app.plex.tv/auth#?{query}"}
+
+
+async def pin_token(pin_id: int) -> str:
+    """The account token once the user approved the PIN, else ""."""
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(f"https://plex.tv/api/v2/pins/{pin_id}", headers=headers(""))
+        r.raise_for_status()
+    return r.json().get("authToken") or ""
 
 
 class Server:

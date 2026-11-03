@@ -2,12 +2,35 @@
 import { $, $$, esc, t, I, api, post, put, toast, when, lang, setLang } from './util.js';
 import { applyStaticTexts } from './app.js';
 
-const field = (k, label, value, opts = {}) => `<label class="ff"><span class="ff-l">${label}</span>
+export const field = (k, label, value, opts = {}) => `<label class="ff"><span class="ff-l">${label}</span>
   <input class="input" data-k="${k}" type="${opts.type || 'text'}" value="${esc(value ?? '')}" ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} ${opts.min != null ? `min="${opts.min}"` : ''} autocomplete="off" spellcheck="false">
   ${opts.help ? `<span class="ff-h">${opts.help}</span>` : ''}</label>`;
-const sw = (k, label, on, help = '') => `<div class="srow"><label class="switch"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span></span></label>
+export const sw = (k, label, on, help = '') => `<div class="srow"><label class="switch"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span></span></label>
   <div><b style="font-weight:600">${label}</b>${help ? `<div class="ff-h">${help}</div>` : ''}</div></div>`;
-const res = (ok, text) => `<span class="res ${ok ? 'ok' : 'bad'}">${ok ? I.check : I.x} ${esc(text)}</span>`;
+export const res = (ok, text) => `<span class="res ${ok ? 'ok' : 'bad'}">${ok ? I.check : I.x} ${esc(text)}</span>`;
+
+/** Signs in with Plex: opens app.plex.tv with a PIN and waits until it is approved. Returns a function that stops waiting. */
+export function plexSignIn(done) {
+  const w = window.open('', '_blank');  // open it right away: a window opened after an await gets blocked
+  let stopped = false;
+  const stop = () => { stopped = true; };
+  (async () => {
+    try {
+      const pin = await post('/api/plex/pin');
+      if (!w) { done({ ok: false, error: t('plex.popup') }); return; }
+      w.location = pin.url;
+      for (let i = 0; i < 300 && !stopped; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const closed = w.closed;
+        const r = await api('/api/plex/pin/' + pin.id);
+        if (r.ok) { try { w.close(); } catch { /* already closed */ } done({ ok: true }); return; }
+        if (closed) { done({ ok: false, error: t('plex.cancelled') }); return; }
+      }
+      if (!stopped) done({ ok: false, error: t('plex.timeout') });
+    } catch (e) { w?.close(); done({ ok: false, error: e.message }); }
+  })();
+  return stop;
+}
 
 export async function renderSettings(S) {
   const v = $('#view');
@@ -22,6 +45,7 @@ export async function renderSettings(S) {
     <div class="settings">
       <section class="card" id="sec-plex">
         <h3>Plex</h3><p class="help">${t('set.plexHelp')}</p>
+        <div class="srow"><button class="btn" id="plex-signin">${I.lock} ${t('wiz.plex.signIn')}</button><span id="plex-signin-res"></span></div>
         <div class="form">${field('plex_token', t('set.plexToken'), s.plex_token, { help: t('set.plexTokenHelp') })}</div>
         <div class="actions"><button class="btn" id="find-servers">${I.search} ${t('set.findServers')}</button></div>
         <div class="checks" id="server-list">${st.servers.map((x) => serverRow({ ...x, ok: !x.error }, true)).join('')}</div>
@@ -77,6 +101,7 @@ export async function renderSettings(S) {
         ${sw('subtitles', t('set.subtitles'), s.subtitles, t('set.subtitlesHelp'))}
         <h4>${t('set.language')}</h4>
         <div class="seg" id="lang-seg">${[['nl', 'Nederlands'], ['en', 'English']].map(([k, l]) => `<button data-l="${k}" class="${lang() === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="actions"><a class="btn sm" href="#/setup">${t('set.rerunWizard')}</a></div>
       </section>
 
       <section class="card" id="sec-login">
@@ -111,6 +136,15 @@ export async function renderSettings(S) {
   };
   $('#save').onclick = async () => {
     try { await put('/api/settings', values()); toast(t('set.saved'), 'good'); S.lib = null; renderSettings(S); } catch (e) { toast(e.message, 'bad'); }
+  };
+  $('#plex-signin').onclick = () => {
+    $('#plex-signin-res').innerHTML = `<span class="spinner"></span> ${t('wiz.plex.waiting')}`;
+    plexSignIn(async (r) => {
+      if (!r.ok) { $('#plex-signin-res').innerHTML = res(false, r.error); return; }
+      $('#plex-signin-res').innerHTML = res(true, t('wiz.plex.signedIn'));
+      $('[data-k=plex_token]').value = (await api('/api/settings')).plex_token;
+      $('#find-servers').click();
+    });
   };
   $('#find-servers').onclick = async () => {
     const b = $('#find-servers'); b.disabled = true;
@@ -164,7 +198,7 @@ export async function renderSettings(S) {
   };
 }
 
-function serverRow(x, checked) {
+export function serverRow(x, checked) {
   const state = x.ok === false ? res(false, x.error || t('set.offline'))
     : x.downloads === false ? res(false, t('set.noDownloads'))
       : x.downloads ? res(true, t('set.downloadsOk', { via: x.via || '' })) : (x.files != null ? `<span class="muted" style="font-size:13px">${t('set.files', { n: x.files })}</span>` : '');
@@ -172,7 +206,7 @@ function serverRow(x, checked) {
     <div><b>${esc(x.name)}</b> ${x.owner ? `<span class="muted">· ${esc(x.owner)}</span>` : ''}<div>${state}</div></div></label>`;
 }
 
-function linkRow(a, st) {
+export function linkRow(a, st) {
   const name = a === 'radarr' ? 'Radarr' : 'Sonarr';
   if (!st[a]) return `<div class="conn"><div class="conn-h"><b>${name}</b><span class="muted">${t('set.notConfigured')}</span></div></div>`;
   const l = st.links[a] || {};

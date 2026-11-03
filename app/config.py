@@ -44,5 +44,6 @@ DEFAULT_SETTINGS = {
     "language": "nl",
     "auth_enabled": False,
     "auth_user": "",
+    "setup_done": False,           # the setup wizard was finished (an install that already works counts as done)
 }
 SECRET_SETTINGS = ("plex_token", "radarr_api_key", "sonarr_api_key")

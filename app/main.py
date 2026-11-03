@@ -522,7 +522,7 @@ async def put_settings(values: dict):
     s = db.get_settings()
     clean = {}
     for k, v in values.items():
-        if k not in config.DEFAULT_SETTINGS or k in ("auth_enabled", "auth_user"):
+        if k not in config.DEFAULT_SETTINGS or k in ("auth_enabled", "auth_user", "setup_done"):
             continue
         if k in config.SECRET_SETTINGS:
             v = _unmask(v or "", k)
@@ -646,6 +646,55 @@ async def sweep_now():
         return await sweep.run_once()
     except ArrError as e:
         raise HTTPException(400, str(e))
+
+
+# --- setup wizard --------------------------------------------------------------------------------------
+@app.get("/api/setup")
+async def setup_info():
+    s = db.get_settings()
+    return {"setupDone": s["setup_done"] or bool(s["plex_token"] and s["servers"]), "version": config.VERSION}
+
+
+@app.post("/api/setup/complete")
+async def setup_complete():
+    db.set_settings({"setup_done": True})
+    return {"ok": True}
+
+
+@app.post("/api/plex/pin")
+async def plex_pin():
+    try:
+        return await plex.new_pin()
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"plex.tv: {e}")
+
+
+@app.get("/api/plex/pin/{pin_id}")
+async def plex_pin_check(pin_id: int):
+    """Saves the account token once the user approved the PIN on app.plex.tv."""
+    try:
+        token = await plex.pin_token(pin_id)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(400 if e.response.status_code == 404 else 502, "pin")
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"plex.tv: {e}")
+    if token:
+        db.set_settings({"plex_token": token})
+    return {"ok": bool(token), "token": _mask(token)}
+
+
+@app.post("/api/check/download-dir")
+async def check_download_dir():
+    """Per connected app: does it see PlexArr's download folder at the same path?"""
+    out = {}
+    for a in (RADARR, SONARR):
+        if not a.configured:
+            continue
+        try:
+            out[a.app] = {"ok": await a.sees(config.DOWNLOAD_DIR)}
+        except (ArrError, httpx.HTTPError, OSError) as e:
+            out[a.app] = {"ok": False, "error": str(e)}
+    return {"dir": str(config.DOWNLOAD_DIR), "apps": out}
 
 
 @app.get("/api/apikey")

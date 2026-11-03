@@ -1,6 +1,7 @@
 // PlexArr web UI (no build step): the friends' library, detail panel, downloads, activity, login and routing.
 import { $, $$, esc, store, t, bytes, dur, num, when, collate, I, api, post, toast, events } from './util.js';
 import { renderSettings } from './settings.js';
+import { renderWizard } from './wizard.js';
 
 export const S = {
   route: 'library',
@@ -10,6 +11,7 @@ export const S = {
   f: { q: '', type: 'all', show: 'all', sort: 'added', ...store.get('filters', {}) },
   detail: null,
   auth: { enabled: false, loggedIn: true },
+  setupDone: true,
 };
 const poster = (it, w = 300) => `/api/poster/${it.server}/${it.key}?w=${w}`;
 const serverName = (id) => (S.status?.servers || []).find((s) => s.id === id)?.name || '';
@@ -36,7 +38,7 @@ $('#theme-btn').addEventListener('click', () => {
 $('#logout-btn').addEventListener('click', async () => { await post('/api/auth/logout'); location.reload(); });
 
 // --- routing -------------------------------------------------------------------------------------
-const ROUTES = { downloads: 'downloads', activity: 'activity', activiteit: 'activity', settings: 'settings', instellingen: 'settings' };
+const ROUTES = { downloads: 'downloads', activity: 'activity', activiteit: 'activity', settings: 'settings', instellingen: 'settings', setup: 'setup' };
 function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   if (parts[0] === 'item') return { route: 'library', item: { kind: parts[1], server: parts[2], key: parts[3] } };
@@ -44,12 +46,14 @@ function parseHash() {
 }
 export async function route(force = false) {
   const { route: r, item } = parseHash();
+  if (!S.setupDone && r !== 'setup') { location.hash = '#/setup'; return; }
+  document.body.classList.toggle('setup-mode', r === 'setup');
   const changed = force || r !== S.route || !$('#view').dataset.route;
   S.route = r;
   $$('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.route === r));
   if (changed) {
     $('#view').dataset.route = r;
-    const views = { library: renderLibrary, downloads: renderDownloads, activity: renderActivity, settings: () => renderSettings(S) };
+    const views = { library: renderLibrary, downloads: renderDownloads, activity: renderActivity, settings: () => renderSettings(S), setup: () => renderWizard(S) };
     await views[r]();
     window.scrollTo(0, 0);
   }
@@ -113,7 +117,7 @@ async function renderLibrary() {
     try { await loadLibrary(); } catch (e) { v.innerHTML = `<div class="empty">${t('lib.loadFailed', { err: esc(e.message) })}</div>`; return; }
   }
   if (!S.lib.configured) {
-    v.innerHTML = `<div class="empty">${I.server}<p>${t('lib.notConfigured')}</p><a class="btn primary" href="#/settings">${t('lib.openSettings')}</a></div>`;
+    v.innerHTML = `<div class="empty">${I.server}<p>${t('lib.notConfigured')}</p><a class="btn primary" href="#/setup">${t('lib.openSetup')}</a></div>`;
     return;
   }
   const f = S.f;
@@ -601,6 +605,7 @@ applyStaticTexts();
   try { S.auth = await api('/api/auth/status'); } catch { /* network error: try anyway */ }
   if (!S.auth.loggedIn) { renderLogin(); return; }
   $('#logout-btn').hidden = !S.auth.enabled;
+  try { S.setupDone = (await api('/api/setup')).setupDone; } catch { /* keep default */ }
   await poll();
   await route(true);
   setInterval(poll, 3000);
