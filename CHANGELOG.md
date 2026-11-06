@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The settings section *Link with Sonarr & Radarr* is now called *Link with Sonarr, Radarr & Bazarr*, and its texts mention Bazarr (the address field, and what to change after a new API key).
+
 ## 0.3.0
 
 - **Bazarr:** PlexArr answers as a Subsarr server, a subtitle provider Bazarr has built in. Bazarr searches the external subtitles (.srt, .ass) on the friends' servers by IMDb id or title; the friend's file name comes along, so Bazarr's score shows whether the subtitle fits your release. Settings → *Link with Sonarr & Radarr* shows the base URL for Bazarr, and Activity shows each search.
