@@ -592,7 +592,7 @@ function videoItem(j, showSource) {
       ${j.subs?.length ? `<div class="subchips" title="${t('dl.subsAlong')}">${j.subs.map((x) => `<span class="subchip">${I.subtitles} ${esc(langName(x.lang))}${x.forced ? ` (${t('dl.forced')})` : ''}</span>`).join('')}</div>` : ''}
       ${j.status === 'Failed' ? `<button class="btn sm" data-act="retry" data-id="${j.id}" style="margin-top:6px">${I.retry} ${t('dl.retryBtn')}</button>` : ''}
     </div>
-    ${meta(bytes(j.size) + (took ? ` · ${dur(took)}` : ''), when(j.finished || j.created))}
+    ${meta(bytes(j.size) + (took && j.status === 'Completed' ? ` · <span title="${t('dl.tookHelp')}">${t('dl.took', { d: dur(took) })} · ${bytes(j.size / Math.max(took, 1))}/s</span>` : ''), when(j.finished || j.created))}
   </div>`;
 }
 function subItem(x, showSource) {

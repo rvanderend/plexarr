@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The time next to a finished download reads "in 5 min" and comes with the average speed ("10.6 GB · in 5 min · 39 MB/s").
 - **No more flicker on Downloads:** the page no longer rebuilds itself every 3 seconds. Only what changed is replaced, and a running download only updates its numbers, so posters aren't loaded again.
 - **Download history per title:** the history groups everything per movie or episode, with the poster, the video and the subtitles that came in for it, each marked as video or subtitle. A filter shows all, only videos or only subtitles. Long release names break at dots and spaces instead of in the middle of a word.
 - **Downloads shows where it comes from:** each download and subtitle shows the friend's Plex server and the friend who shares it, in the queue, the current download and the history.
