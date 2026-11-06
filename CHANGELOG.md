@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Reachable right after a restart:** the health check runs every 2 seconds while PlexArr starts, instead of once a minute. A reverse proxy that waits for a healthy container (such as Traefik) no longer answers "404 page not found" for up to a minute after an update.
 - The time next to a finished download reads "in 5 min" and comes with the average speed ("10.6 GB · in 5 min · 39 MB/s").
 - **No more flicker on Downloads:** the page no longer rebuilds itself every 3 seconds. Only what changed is replaced, and a running download only updates its numbers, so posters aren't loaded again.
 - **Download history per title:** the history groups everything per movie or episode, with the poster, the video and the subtitles that came in for it, each marked as video or subtitle. A filter shows all, only videos or only subtitles. Long release names break at dots and spaces instead of in the middle of a word.

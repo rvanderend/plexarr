@@ -5,6 +5,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 EXPOSE 8080
-HEALTHCHECK --interval=1m --timeout=10s --retries=3 \
+HEALTHCHECK --interval=1m --timeout=10s --retries=3 --start-period=1m --start-interval=2s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health', timeout=5)"
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
