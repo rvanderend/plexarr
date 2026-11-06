@@ -470,6 +470,13 @@ async function renderDownloads() {
     renderDownloads();
   }));
 }
+// Where it comes from: the friend's Plex server and the friend who shares it.
+const source = (x) => {
+  const src = x.source;
+  if (!src?.name) return '';
+  const who = src.owner && src.owner !== src.name ? ` · ${src.owner}` : '';
+  return `<span class="src" title="${esc(t('dl.from'))}">${I.server} ${esc(src.name + who)}</span>`;
+};
 const jobPoster = (j) => (j.key ? `/api/poster/${j.server}/${j.key}?w=300` : '');
 function currentCard(j) {
   const pct = j.size ? (j.done / j.size) * 100 : 0;
@@ -478,6 +485,7 @@ function currentCard(j) {
     <div style="min-width:0">
       <h3>${esc(j.label)}</h3>
       <div class="muted" style="font-size:13.5px">${esc(j.sublabel || '')}</div>
+      ${j.source ? `<div class="muted" style="font-size:13px;margin-top:4px">${source(j)}</div>` : ''}
       <div class="stage">${I.download} ${t('job.Downloading')}${j.attempts ? ` · ${t('dl.retry', { n: j.attempts })}` : ''}</div>
       <div class="pbar"><i style="width:${pct.toFixed(1)}%"></i></div>
       <div class="metrics">
@@ -499,6 +507,7 @@ function queueRow(j, i) {
     <div class="pos">${i + 1}</div>
     <img src="${jobPoster(j)}" alt="" onerror="this.style.visibility='hidden'">
     <div style="min-width:0"><div class="t">${esc(j.label)} <span class="muted">${esc(j.sublabel || '')}</span></div><div class="s">${esc(j.name)}</div>
+      ${j.source ? `<div class="s">${source(j)}</div>` : ''}
       ${j.message ? `<div class="s" style="color:var(--warn)">${esc(j.message)}</div>` : ''}</div>
     <div class="r">${bytes(j.size)}<br><span class="badge ${j.status === 'Paused' ? 'warn' : ''}">${t('job.' + j.status)}</span></div>
     <div class="btns">
@@ -513,6 +522,7 @@ function historyRow(j) {
   return `<div class="hrow">
     <div style="min-width:0"><div class="t">${esc(j.label)} <span class="muted">${esc(j.sublabel || '')}</span></div>
       <div class="s mono">${esc(j.name)}</div>
+      ${j.source ? `<div class="s">${source(j)}</div>` : ''}
       ${j.status === 'Failed' ? `<div class="s" style="color:var(--bad)">${esc(j.message)}</div>` : ''}
       ${j.status === 'Completed' ? `<div class="s">${j.removed ? t('dl.imported') : t('dl.waitImport')}</div>` : ''}
       ${j.subs?.length ? `<div class="s">${t('dl.withSubs', { langs: j.subs.map((x) => langName(x.lang) + (x.forced ? ` (${t('dl.forced')})` : '')).join(', ') })}</div>` : ''}</div>
@@ -525,7 +535,8 @@ function subRow(x) {
   const what = langName(x.lang) + (x.hi ? ` (${t('dl.hi')})` : '');
   return `<div class="hrow">
     <div style="min-width:0"><div class="t">${esc(x.label)} <span class="muted">${esc(x.sublabel || '')}</span></div>
-      <div class="s">${t('dl.subVia', { lang: what })}</div></div>
+      <div class="s">${t('dl.subVia', { lang: what })}</div>
+      ${x.source ? `<div class="s">${source(x)}</div>` : ''}</div>
     <div class="r"><span class="badge accent">${t('dl.subBadge')}</span><br>${bytes(x.size || 0)}${x.ext ? ` · ${esc(x.ext)}` : ''}<br><span class="muted">${when(x.at)}</span></div>
   </div>`;
 }

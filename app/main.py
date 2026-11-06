@@ -452,9 +452,20 @@ async def fetch(req: FetchReq):
 
 
 # --- downloads ---------------------------------------------------------------------------------------------
-def _job_view(j) -> dict:
+def _sources() -> dict:
+    """Per Plex server: its name and the friend who shares it (also for servers no longer in use, when known)."""
+    out = {sid: {"name": name, "owner": ""} for sid, name in db.get_state("server_names", {}).items()}
+    for sid, srv in LIB.servers.items():
+        out[sid] = {"name": srv.name, "owner": srv.owner}
+    for sid, st in LIB.status.items():
+        if st.get("name"):
+            out[sid] = {"name": st["name"], "owner": st.get("owner") or out.get(sid, {}).get("owner", "")}
+    return out
+
+
+def _job_view(j, sources: dict | None = None) -> dict:
     pr = DL.progress(j)
-    return {"id": j["nzo_id"], "name": j["name"], "label": j["label"], "sublabel": j["sublabel"], "kind": j["kind"],
+    return {"id": j["nzo_id"], "source": (sources or {}).get(j["server"]), "name": j["name"], "label": j["label"], "sublabel": j["sublabel"], "kind": j["kind"],
             "server": j["server"], "key": j["rating_key"] if j["kind"] == "movie" else j["show_key"],
             "category": j["category"], "status": j["status"], "size": j["size"], "done": pr["done"],
             "speed": pr["speed"], "eta": pr["eta"], "message": j["fail_message"], "created": j["created"],
@@ -468,8 +479,9 @@ async def downloads():
     done = db.q("SELECT * FROM jobs WHERE status IN ('Completed','Failed','Deleted') ORDER BY finished DESC LIMIT 200")
     total = db.q1("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS b FROM jobs WHERE status='Completed'")
     subs = db.q("SELECT * FROM subs ORDER BY at DESC LIMIT 200")
-    return {"paused": DL.paused, "active": [_job_view(j) for j in active], "done": [_job_view(j) for j in done],
-            "subs": [{"id": s["id"], "at": s["at"], "kind": s["kind"], "label": s["label"], "sublabel": s["sublabel"],
+    src = _sources()
+    return {"paused": DL.paused, "active": [_job_view(j, src) for j in active], "done": [_job_view(j, src) for j in done],
+            "subs": [{"id": s["id"], "at": s["at"], "source": src.get(s["server"]), "kind": s["kind"], "label": s["label"], "sublabel": s["sublabel"],
                       "lang": s["lang"], "hi": bool(s["hi"]), "ext": s["ext"], "size": s["size"]} for s in subs],
             "totals": {"count": total["n"], "bytes": total["b"]}}
 
