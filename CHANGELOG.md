@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Download settings apply right away:** a new speed limit also applies to a running download (it used to wait for the next one), a new number of downloads at the same time starts or holds downloads at once, and a new library interval applies within 30 seconds instead of after the current wait. The three fields are aligned and each has a short explanation.
 - **Reachable right after a restart:** the health check runs every 2 seconds while PlexArr starts, instead of once a minute. A reverse proxy that waits for a healthy container (such as Traefik) no longer answers "404 page not found" for up to a minute after an update.
 - The time next to a finished download reads "in 5 min" and comes with the average speed ("10.6 GB · in 5 min · 39 MB/s").
 - **No more flicker on Downloads:** the page no longer rebuilds itself every 3 seconds. Only what changed is replaced, and a running download only updates its numbers, so posters aren't loaded again.

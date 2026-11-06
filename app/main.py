@@ -44,7 +44,10 @@ async def _refresh_loop():
         if db.get_settings()["servers"]:
             await LIB.refresh()
             _lib_cache.clear()
-        await asyncio.sleep(max(5, db.get_settings()["refresh_minutes"]) * 60)
+        last = time.time()
+        # Checked every 30 seconds, so a changed interval applies right away.
+        while time.time() - last < max(5, db.get_settings()["refresh_minutes"]) * 60:
+            await asyncio.sleep(30)
 
 
 @asynccontextmanager
@@ -560,7 +563,11 @@ async def put_settings(values: dict):
         clean[k] = v
     if clean.get("mode", s["mode"]) not in ("fallback", "equal"):
         raise HTTPException(400, "mode")
+    for k, low in (("max_downloads", 1), ("refresh_minutes", 5)):
+        if k in clean:
+            clean[k] = max(low, clean[k])
     db.set_settings(clean)
+    DL.wake.set()                  # more (or fewer) downloads at the same time, a new speed limit
     if any(k in clean for k in ("radarr_url", "radarr_api_key")):
         RADARR.forget()
     if any(k in clean for k in ("sonarr_url", "sonarr_api_key")):

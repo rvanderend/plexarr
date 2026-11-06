@@ -232,6 +232,7 @@ class Downloader:
                         if now - t0 >= 2:
                             live["speed"] = window_bytes / (now - t0)
                             t0, window_bytes = now, 0
+                            limit = db.get_settings()["speed_limit"] * 1e6   # a new limit applies right away
                         live["done"] = done
                         if now - last_db > 5:
                             db.x("UPDATE jobs SET done=? WHERE nzo_id=?", (done, nzo))

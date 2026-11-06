@@ -103,9 +103,9 @@ export async function renderSettings(S) {
       <section class="card" id="sec-download">
         <h3>${t('set.download')}</h3><p class="help">${t('set.downloadHelp', { dir: esc(s.downloadDir) })}</p>
         <div class="form">
-          ${field('max_downloads', t('set.maxDownloads'), s.max_downloads, { type: 'number', min: 1 })}
+          ${field('max_downloads', t('set.maxDownloads'), s.max_downloads, { type: 'number', min: 1, help: t('set.maxDownloadsHelp') })}
           ${field('speed_limit', t('set.speedLimit'), s.speed_limit, { type: 'number', min: 0, help: t('set.speedLimitHelp') })}
-          ${field('refresh_minutes', t('set.refresh'), s.refresh_minutes, { type: 'number', min: 5 })}
+          ${field('refresh_minutes', t('set.refresh'), s.refresh_minutes, { type: 'number', min: 5, help: t('set.refreshHelp') })}
         </div>
         ${sw('subtitles', t('set.subtitles'), s.subtitles, t('set.subtitlesHelp'))}
         <h4>${t('set.language')}</h4>
