@@ -114,7 +114,7 @@ Bazarr then searches the friends' servers by IMDb id (of the movie, or of the sh
 docker compose pull plexarr && docker compose up -d plexarr
 ```
 
-`latest` follows the releases; `0.2` stays on 0.2.x; `main` is the newest, untested state. What changed is in [CHANGELOG.md](CHANGELOG.md).
+`latest` follows the releases; `0.3` stays on 0.3.x; `main` is the newest, untested state. What changed is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Troubleshooting
 

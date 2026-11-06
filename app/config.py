@@ -6,7 +6,7 @@ only holds where things are stored.
 import os
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 
 def env(name: str, default: str = "") -> str:

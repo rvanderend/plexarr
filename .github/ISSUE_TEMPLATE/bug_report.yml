@@ -24,7 +24,7 @@ body:
     attributes:
       label: Versions
       description: PlexArr (the `version` at `/api/health`), Sonarr and Radarr.
-      placeholder: "PlexArr 0.2.0, Sonarr 4.0.15, Radarr 5.28"
+      placeholder: "PlexArr 0.3.0, Sonarr 4.0.15, Radarr 5.28"
   - type: textarea
     id: logs
     attributes:
