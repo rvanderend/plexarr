@@ -3,7 +3,7 @@ import { $, $$, esc, t, I, api, post, put, toast, when, lang, setLang } from './
 import { applyStaticTexts } from './app.js';
 
 export const field = (k, label, value, opts = {}) => `<label class="ff"><span class="ff-l">${label}</span>
-  <input class="input" data-k="${k}" type="${opts.type || 'text'}" value="${esc(value ?? '')}" ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} ${opts.min != null ? `min="${opts.min}"` : ''} autocomplete="off" spellcheck="false">
+  <input class="input" data-k="${k}" type="${opts.type || 'text'}" value="${esc(value ?? '')}" ${opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} ${opts.min != null ? `min="${opts.min}"` : ''} ${opts.step ? `step="${opts.step}"` : ''} autocomplete="off" spellcheck="false">
   ${opts.help ? `<span class="ff-h">${opts.help}</span>` : ''}</label>`;
 export const sw = (k, label, on, help = '') => `<div class="srow"><label class="switch"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span></span></label>
   <div><b style="font-weight:600">${label}</b>${help ? `<div class="ff-h">${help}</div>` : ''}</div></div>`;
@@ -104,7 +104,7 @@ export async function renderSettings(S) {
         <h3>${t('set.download')}</h3><p class="help">${t('set.downloadHelp', { dir: esc(s.downloadDir) })}</p>
         <div class="form">
           ${field('max_downloads', t('set.maxDownloads'), s.max_downloads, { type: 'number', min: 1, help: t('set.maxDownloadsHelp') })}
-          ${field('speed_limit', t('set.speedLimit'), s.speed_limit, { type: 'number', min: 0, help: t('set.speedLimitHelp') })}
+          ${field('speed_limit', t('set.speedLimit'), s.speed_limit, { type: 'number', min: 0, step: '0.1', help: t('set.speedLimitHelp') })}
           ${field('refresh_minutes', t('set.refresh'), s.refresh_minutes, { type: 'number', min: 5, help: t('set.refreshHelp') })}
         </div>
         ${sw('subtitles', t('set.subtitles'), s.subtitles, t('set.subtitlesHelp'))}

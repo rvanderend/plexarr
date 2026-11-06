@@ -15,13 +15,40 @@ from . import config, db, plex
 from .plex import LIB
 
 log = logging.getLogger("plexarr.download")
-CHUNK = 1 << 20
+CHUNK = 1 << 18                 # 256 KiB: small enough for an even pace at a low speed limit
 MAX_ATTEMPTS = 8
 SUB_EXT = {"srt": "srt", "ass": "ass", "ssa": "ssa", "vtt": "vtt", "smi": "smi", "webvtt": "vtt"}
 
 
 class Cancelled(Exception):
     pass
+
+
+class Throttle:
+    """One speed limit for all downloads together. Each chunk books the next slot of time at the limit and
+    waits for it. An idle moment gives no credit, so the limit isn't exceeded in bursts either."""
+
+    def __init__(self):
+        self.next = 0.0
+        self.limit, self.read_at = 0.0, 0.0
+
+    def rate(self) -> float:
+        now = time.monotonic()
+        if now - self.read_at > 2:          # a changed limit applies within 2 seconds
+            self.limit, self.read_at = float(db.get_settings()["speed_limit"] or 0) * 1e6, now
+        return self.limit
+
+    async def take(self, n: int):
+        limit = self.rate()
+        if limit <= 0:
+            return
+        now = time.monotonic()
+        self.next = max(self.next, now) + n / limit
+        if self.next > now:
+            await asyncio.sleep(self.next - now)
+
+
+THROTTLE = Throttle()
 
 
 class Downloader:
@@ -204,7 +231,6 @@ class Downloader:
             hdr["Range"] = f"bytes={done}-"
         live = self.live.setdefault(nzo, {"done": done, "speed": 0.0})
         live["done"] = done
-        limit = db.get_settings()["speed_limit"] * 1e6
         timeout = httpx.Timeout(30, read=120)
         async with httpx.AsyncClient(timeout=timeout) as c:
             async with c.stream("GET", base + part_key, params={"download": 1}, headers=hdr) as resp:
@@ -223,16 +249,11 @@ class Downloader:
                         f.write(chunk)
                         done += len(chunk)
                         window_bytes += len(chunk)
+                        await THROTTLE.take(len(chunk))
                         now = time.monotonic()
-                        if limit:
-                            ahead = window_bytes / limit - (now - t0)
-                            if ahead > 0:
-                                await asyncio.sleep(ahead)
-                                now = time.monotonic()
                         if now - t0 >= 2:
                             live["speed"] = window_bytes / (now - t0)
                             t0, window_bytes = now, 0
-                            limit = db.get_settings()["speed_limit"] * 1e6   # a new limit applies right away
                         live["done"] = done
                         if now - last_db > 5:
                             db.x("UPDATE jobs SET done=? WHERE nzo_id=?", (done, nzo))

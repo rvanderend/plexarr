@@ -38,7 +38,7 @@ DEFAULT_SETTINGS = {
     "sweep_per_run": 3,            # at most this many searches per hour (they also hit your Usenet indexers)
     "sweep_repeat_days": 7,        # search the same item again after this many days at the earliest
     "max_downloads": 1,            # at the same time
-    "speed_limit": 0,              # MB/s, 0 = no limit
+    "speed_limit": 0.0,            # MB/s for all downloads together, 0 = no limit
     "subtitles": True,             # also fetch external subtitles next to the video
     "refresh_minutes": 30,         # how often the friends' libraries are read again
     "language": "nl",

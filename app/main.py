@@ -551,6 +551,11 @@ async def put_settings(values: dict):
         default = config.DEFAULT_SETTINGS[k]
         if isinstance(default, bool):
             v = bool(v)
+        elif isinstance(default, float):
+            try:
+                v = round(max(0.0, float(str(v).replace(",", "."))), 1)
+            except (TypeError, ValueError):
+                raise HTTPException(400, k)
         elif isinstance(default, int):
             try:
                 v = max(0, int(v))
