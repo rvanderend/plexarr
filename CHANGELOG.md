@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Activity shows one line per Bazarr subtitle search. Bazarr asks again by title when the IMDb search finds nothing, so each search used to appear twice.
+
 ## 0.4.0
 
 **Downloads**
