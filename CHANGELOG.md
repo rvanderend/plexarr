@@ -1,17 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
-- **The speed limit shows on Downloads:** the speed card says "limit 5 MB/s" (a link to the setting) and a running download is marked "Limited to 5 MB/s", updated live when the limit changes.
-- **Speed limit fixed:** the limit is now for all downloads together (it was per download, so two downloads used twice the limit), allows decimals like 0.5 (a value below 1 used to mean no limit at all), and keeps an even pace. Measured: 4.94 MB/s for two downloads at a limit of 5, 0.50 at a limit of 0.5.
-- **Download settings apply right away:** a new speed limit also applies to a running download (it used to wait for the next one), a new number of downloads at the same time starts or holds downloads at once, and a new library interval applies within 30 seconds instead of after the current wait. The three fields are aligned and each has a short explanation.
-- **Reachable right after a restart:** the health check runs every 2 seconds while PlexArr starts, instead of once a minute. A reverse proxy that waits for a healthy container (such as Traefik) no longer answers "404 page not found" for up to a minute after an update.
-- The time next to a finished download reads "in 5 min" and comes with the average speed ("10.6 GB · in 5 min · 39 MB/s").
-- **No more flicker on Downloads:** the page no longer rebuilds itself every 3 seconds. Only what changed is replaced, and a running download only updates its numbers, so posters aren't loaded again.
-- **Download history per title:** the history groups everything per movie or episode, with the poster, the video and the subtitles that came in for it, each marked as video or subtitle. A filter shows all, only videos or only subtitles. Long release names break at dots and spaces instead of in the middle of a word.
-- **Downloads shows where it comes from:** each download and subtitle shows the friend's Plex server and the friend who shares it, in the queue, the current download and the history.
-- **Downloads shows subtitles:** the subtitles Bazarr fetched through PlexArr appear in the history (with the movie or episode and the language), and a download lists the subtitles that came along with it.
-- The settings section *Link with Sonarr & Radarr* is now called *Link with Sonarr, Radarr & Bazarr*, and its texts mention Bazarr (the address field, and what to change after a new API key).
+**Downloads**
+- **History per title:** one block per movie or episode, with the poster, the video and the subtitles that came in for it, each marked as video or subtitle. A filter shows all, only videos or only subtitles.
+- **Subtitles from Bazarr show up:** the subtitles Bazarr fetched through PlexArr appear in the history with their language, and a download lists the subtitles that came along with it.
+- **Where it comes from:** each download and subtitle shows the friend's Plex server and the friend who shares it, in the queue, the current download and the history.
+- **How long it took:** a finished download reads "10.6 GB · in 5 min · 39 MB/s".
+- **The speed limit shows:** the speed card says "limit 5 MB/s" (a link to the setting) and a running download is marked "Limited to 5 MB/s", updated live.
+- No more flicker: the page only replaces what changed, and a running download only updates its numbers. Long release names break at dots and spaces instead of in the middle of a word.
+
+**Speed limit and settings**
+- **The speed limit works properly:** it is for all downloads together (it was per download, so two downloads used twice the limit), allows decimals like 0.5 (a value below 1 used to mean no limit at all), keeps an even pace, and a change applies within 2 seconds, also to a running download. Measured: 4.94 MB/s for two downloads at a limit of 5, 0.50 at a limit of 0.5.
+- A new number of downloads at the same time applies at once, and a new library interval within 30 seconds. The download settings line up and each has a short explanation.
+- The settings section *Link with Sonarr & Radarr* is now *Link with Sonarr, Radarr & Bazarr*.
+
+**Reliability**
+- **Reachable right after an update:** the health check runs every 2 seconds while PlexArr starts, instead of once a minute, so a reverse proxy that waits for a healthy container (such as Traefik) no longer answers "404 page not found" for up to a minute.
+- Interrupted downloads are put back in the queue only when PlexArr starts, so another process opening the database can't make a running download look queued.
 
 ## 0.3.0
 
