@@ -28,6 +28,8 @@ log = logging.getLogger("plexarr.subsarr")
 router = APIRouter()
 CACHE_SECONDS = 600
 _streams: dict[tuple[str, str], tuple[float, dict]] = {}
+# Bazarr asks again by title when the imdb search found nothing: log that second answer only if it found more.
+_logged: dict[tuple[str, str], tuple[float, int]] = {}
 
 # Bazarr's Subsarr language names (Subscene's, as slugs) with ISO 639-1 and 639-2 T/B codes.
 _LANGS = """abkhazian ab abk; afrikaans af afr; albanian sq sqi alb; amharic am amh; arabic ar ara; aragonese an arg;
@@ -165,7 +167,10 @@ async def search(key: str, request: Request):
     items = [i for found in await asyncio.gather(*(_items(r, lang, base) for r in rows)) for i in found]
     if rows:
         what = _label(rows)
-        db.event("subtitles", f"Bazarr {lang}: {what}: {len(items)} found", what=what, lang=lang, found=len(items))
+        prev = _logged.get((what, lang))
+        if not prev or time.time() - prev[0] > 60 or len(items) > prev[1]:
+            _logged[(what, lang)] = (time.time(), len(items))
+            db.event("subtitles", f"Bazarr {lang}: {what}: {len(items)} found", what=what, lang=lang, found=len(items))
     return JSONResponse({"items": items, "total": len(items)})
 
 
