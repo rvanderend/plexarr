@@ -71,6 +71,7 @@ export const I = {
   x: ic('<path d="M18 6 6 18M6 6l12 12"/>'),
   download: ic('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>'),
   server: ic('<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>'),
+  subtitles: ic('<rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M6 11h5M14 11h4M6 15h8M17 15h1"/>'),
   tv: ic('<rect x="2" y="6" width="20" height="14" rx="2"/><path d="m8 2 4 4 4-4"/>'),
   activity: ic('<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'),
   eye: ic('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),

@@ -465,7 +465,7 @@ def _sources() -> dict:
 
 def _job_view(j, sources: dict | None = None) -> dict:
     pr = DL.progress(j)
-    return {"id": j["nzo_id"], "source": (sources or {}).get(j["server"]), "name": j["name"], "label": j["label"], "sublabel": j["sublabel"], "kind": j["kind"],
+    return {"id": j["nzo_id"], "source": (sources or {}).get(j["server"]), "item": j["rating_key"], "name": j["name"], "label": j["label"], "sublabel": j["sublabel"], "kind": j["kind"],
             "server": j["server"], "key": j["rating_key"] if j["kind"] == "movie" else j["show_key"],
             "category": j["category"], "status": j["status"], "size": j["size"], "done": pr["done"],
             "speed": pr["speed"], "eta": pr["eta"], "message": j["fail_message"], "created": j["created"],
@@ -481,7 +481,9 @@ async def downloads():
     subs = db.q("SELECT * FROM subs ORDER BY at DESC LIMIT 200")
     src = _sources()
     return {"paused": DL.paused, "active": [_job_view(j, src) for j in active], "done": [_job_view(j, src) for j in done],
-            "subs": [{"id": s["id"], "at": s["at"], "source": src.get(s["server"]), "kind": s["kind"], "label": s["label"], "sublabel": s["sublabel"],
+            "subs": [{"id": s["id"], "at": s["at"], "source": src.get(s["server"]), "server": s["server"],
+                      "item": s["rating_key"], "key": s["rating_key"] if s["kind"] == "movie" else s["show_key"],
+                      "kind": s["kind"], "label": s["label"], "sublabel": s["sublabel"],
                       "lang": s["lang"], "hi": bool(s["hi"]), "ext": s["ext"], "size": s["size"]} for s in subs],
             "totals": {"count": total["n"], "bytes": total["b"]}}
 

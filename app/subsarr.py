@@ -177,9 +177,10 @@ async def download(key: str, server: str, part_id: int, stream_id: int, ext: str
     row = db.q1("SELECT * FROM releases WHERE server=? AND part_id=?", (server, part_id))
     if row:
         label, sub = labels(row)
-        db.x("INSERT INTO subs(at, server, part_id, stream_id, kind, label, sublabel, lang, hi, ext, size) "
-             "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-             (time.time(), server, part_id, stream_id, row["kind"], label, sub, lang, int(bool(hi)), ext, len(content)))
+        db.x("INSERT INTO subs(at, server, part_id, stream_id, kind, label, sublabel, rating_key, show_key, lang, hi, ext, "
+             "size) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+             (time.time(), server, part_id, stream_id, row["kind"], label, sub, row["rating_key"], row["show_key"], lang,
+              int(bool(hi)), ext, len(content)))
         db.x("DELETE FROM subs WHERE id <= (SELECT MAX(id) - 1000 FROM subs)")
     return _file(content, stream_id, ext)
 

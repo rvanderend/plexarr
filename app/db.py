@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS subs (
     at REAL NOT NULL,
     server TEXT NOT NULL, part_id INTEGER, stream_id INTEGER NOT NULL,
     kind TEXT, label TEXT NOT NULL, sublabel TEXT DEFAULT '',
+    rating_key TEXT, show_key TEXT,
     lang TEXT, hi INTEGER DEFAULT 0, ext TEXT, size INTEGER
 );
 CREATE TABLE IF NOT EXISTS requests (
@@ -83,6 +84,9 @@ def conn() -> sqlite3.Connection:
             _conn.execute("ALTER TABLE events ADD COLUMN data TEXT")
         if "subs" not in {r["name"] for r in _conn.execute("PRAGMA table_info(jobs)")}:
             _conn.execute("ALTER TABLE jobs ADD COLUMN subs TEXT")
+        if "rating_key" not in {r["name"] for r in _conn.execute("PRAGMA table_info(subs)")}:
+            _conn.execute("ALTER TABLE subs ADD COLUMN rating_key TEXT")
+            _conn.execute("ALTER TABLE subs ADD COLUMN show_key TEXT")
         # Downloads that were running when the service stopped continue where they were.
         _conn.execute("UPDATE jobs SET status='Queued' WHERE status='Downloading'")
     return _conn

@@ -444,9 +444,9 @@ async function renderDownloads() {
   const running = d.active.filter((j) => j.status === 'Downloading');
   const waiting = d.active.filter((j) => j.status !== 'Downloading');
   const speed = running.reduce((a, j) => a + j.speed, 0);
-  // Downloads and the subtitles Bazarr fetched, newest first.
-  const history = [...d.done.map((j) => ({ at: j.finished || j.created, job: j })), ...(d.subs || []).map((x) => ({ at: x.at, sub: x }))]
-    .sort((a, b) => b.at - a.at);
+  const filter = store.get('dlFilter', 'all');
+  const groups = historyGroups(d, filter);
+  const counts = { all: d.done.length + (d.subs || []).length, video: d.done.length, sub: (d.subs || []).length };
   v.innerHTML = `
     <div class="toolbar">
       <div><h1 class="page">${t('dl.title')}</h1><p class="page-sub" style="margin:0">${t('dl.sub')}</p></div>
@@ -461,8 +461,12 @@ async function renderDownloads() {
     </div>
     ${running.map(currentCard).join('')}
     ${waiting.length ? `<div class="section-title">${t('dl.queue')}</div><div class="card qlist">${waiting.map(queueRow).join('')}</div>` : ''}
-    <div class="section-title">${t('dl.history')}</div>
-    ${history.length ? `<div class="card">${history.map((h) => (h.sub ? subRow(h.sub) : historyRow(h.job))).join('')}</div>` : `<div class="empty">${I.inbox}<p>${t('dl.none')}</p></div>`}`;
+    <div class="section-title hist-title"><span>${t('dl.history')}</span>
+      <div class="seg hfilter" role="group" aria-label="${t('dl.filter')}">${[['all', t('dl.fAll')], ['video', t('dl.fVideo')], ['sub', t('dl.fSubs')]]
+        .map(([k, l]) => `<button type="button" data-filter="${k}" class="${filter === k ? 'on' : ''}" aria-pressed="${filter === k}">${l} <span class="n num">${counts[k]}</span></button>`).join('')}</div></div>
+    ${groups.length ? `<div class="card">${groups.map(historyGroup).join('')}</div>`
+      : `<div class="empty">${I.inbox}<p>${counts.all ? t('dl.noneFilter') : t('dl.none')}</p></div>`}`;
+  v.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { store.set('dlFilter', b.dataset.filter); renderDownloads(); }));
   $('#pause-btn').onclick = async () => { await post('/api/pause', { paused: !d.paused }); renderDownloads(); };
   v.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', async () => {
     if (b.dataset.act === 'delete' && !confirm(t('dl.confirmDelete'))) return;
@@ -516,28 +520,58 @@ function queueRow(j, i) {
     </div>
   </div>`;
 }
-function historyRow(j) {
-  const cls = { Completed: 'good', Failed: 'bad', Deleted: '' }[j.status] ?? '';
-  const took = j.finished && j.started ? j.finished - j.started : null;
-  return `<div class="hrow">
-    <div style="min-width:0"><div class="t">${esc(j.label)} <span class="muted">${esc(j.sublabel || '')}</span></div>
-      <div class="s mono">${esc(j.name)}</div>
-      ${j.source ? `<div class="s">${source(j)}</div>` : ''}
-      ${j.status === 'Failed' ? `<div class="s" style="color:var(--bad)">${esc(j.message)}</div>` : ''}
-      ${j.status === 'Completed' ? `<div class="s">${j.removed ? t('dl.imported') : t('dl.waitImport')}</div>` : ''}
-      ${j.subs?.length ? `<div class="s">${t('dl.withSubs', { langs: j.subs.map((x) => langName(x.lang) + (x.forced ? ` (${t('dl.forced')})` : '')).join(', ') })}</div>` : ''}</div>
-    <div class="r"><span class="badge ${cls}">${t('job.' + j.status)}</span><br>${bytes(j.size)}${took ? ` · ${dur(took)}` : ''}<br><span class="muted">${when(j.finished)}</span>
-      ${j.status === 'Failed' ? `<br><button class="btn sm" data-act="retry" data-id="${j.id}" style="margin-top:6px">${I.retry} ${t('dl.retryBtn')}</button>` : ''}</div>
+// History: one block per movie or episode, with the video and the subtitles that came in for it. The newest first.
+function historyGroups(d, filter) {
+  const items = [...d.done.map((x) => ({ type: 'video', at: x.finished || x.created, x })), ...(d.subs || []).map((x) => ({ type: 'sub', at: x.at, x }))]
+    .filter((it) => filter === 'all' || it.type === filter)
+    .sort((a, b) => b.at - a.at);
+  const groups = new Map();
+  for (const it of items) {
+    const k = `${it.x.kind}|${it.x.label}|${it.x.sublabel || ''}`;
+    if (!groups.has(k)) groups.set(k, { head: it.x, items: [] });
+    groups.get(k).items.push(it);
+  }
+  return [...groups.values()];
+}
+// Release names only break after a dot, dash, underscore or bracket, not in the middle of a word.
+const breakable = (s) => esc(s).replace(/([._\-)\]])/g, '$1<wbr>');
+const srcKey = (x) => (x.source ? `${x.source.name}|${x.source.owner}` : '');
+function historyGroup(g) {
+  const pic = g.items.find((it) => it.x.key)?.x;
+  const oneSource = new Set(g.items.map((it) => srcKey(it.x))).size === 1;
+  return `<div class="hgroup">
+    ${pic ? `<img class="hposter" src="${jobPoster(pic)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="hposter"></div>'}
+    <div class="hhead"><div class="t">${esc(g.head.label)}${g.head.sublabel ? ` <span class="muted">${esc(g.head.sublabel)}</span>` : ''}</div>
+      ${oneSource && g.head.source ? `<div class="s">${source(g.head)}</div>` : ''}</div>
+    <div class="hitems">${g.items.map((it) => (it.type === 'sub' ? subItem(it.x, !oneSource) : videoItem(it.x, !oneSource))).join('')}</div>
   </div>`;
 }
-
-function subRow(x) {
-  const what = langName(x.lang) + (x.hi ? ` (${t('dl.hi')})` : '');
-  return `<div class="hrow">
-    <div style="min-width:0"><div class="t">${esc(x.label)} <span class="muted">${esc(x.sublabel || '')}</span></div>
-      <div class="s">${t('dl.subVia', { lang: what })}</div>
-      ${x.source ? `<div class="s">${source(x)}</div>` : ''}</div>
-    <div class="r"><span class="badge accent">${t('dl.subBadge')}</span><br>${bytes(x.size || 0)}${x.ext ? ` · ${esc(x.ext)}` : ''}<br><span class="muted">${when(x.at)}</span></div>
+const meta = (size, when_) => `<div class="hmeta num"><span>${size}</span><span class="muted">${when_}</span></div>`;
+function videoItem(j, showSource) {
+  const cls = { Completed: 'good', Failed: 'bad', Deleted: '' }[j.status] ?? '';
+  const took = j.finished && j.started ? j.finished - j.started : null;
+  return `<div class="hitem video">
+    <span class="hic" title="${t('dl.video')}">${j.kind === 'movie' ? I.film : I.tv}</span>
+    <div class="hmain">
+      <div class="hline"><b>${t('dl.video')}</b> <span class="badge ${cls}">${t('job.' + j.status)}</span></div>
+      <div class="s mono rel">${breakable(j.name)}</div>
+      ${showSource && j.source ? `<div class="s">${source(j)}</div>` : ''}
+      ${j.status === 'Failed' ? `<div class="s bad-text">${esc(j.message)}</div>` : ''}
+      ${j.status === 'Completed' ? `<div class="s">${j.removed ? t('dl.imported') : t('dl.waitImport')}</div>` : ''}
+      ${j.subs?.length ? `<div class="subchips" title="${t('dl.subsAlong')}">${j.subs.map((x) => `<span class="subchip">${I.subtitles} ${esc(langName(x.lang))}${x.forced ? ` (${t('dl.forced')})` : ''}</span>`).join('')}</div>` : ''}
+      ${j.status === 'Failed' ? `<button class="btn sm" data-act="retry" data-id="${j.id}" style="margin-top:6px">${I.retry} ${t('dl.retryBtn')}</button>` : ''}
+    </div>
+    ${meta(bytes(j.size) + (took ? ` · ${dur(took)}` : ''), when(j.finished || j.created))}
+  </div>`;
+}
+function subItem(x, showSource) {
+  return `<div class="hitem sub">
+    <span class="hic" title="${t('dl.subBadge')}">${I.subtitles}</span>
+    <div class="hmain">
+      <div class="hline htext"><b>${t('dl.subBadge')}</b> · ${esc(langName(x.lang))}${x.hi ? ` (${t('dl.hi')})` : ''} <span class="muted">· ${t('dl.viaBazarr')}</span></div>
+      ${showSource && x.source ? `<div class="s">${source(x)}</div>` : ''}
+    </div>
+    ${meta(bytes(x.size || 0) + (x.ext ? ` · ${esc(x.ext)}` : ''), when(x.at))}
   </div>`;
 }
 
