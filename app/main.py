@@ -483,7 +483,7 @@ async def downloads():
     total = db.q1("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS b FROM jobs WHERE status='Completed'")
     subs = db.q("SELECT * FROM subs ORDER BY at DESC LIMIT 200")
     src = _sources()
-    return {"paused": DL.paused, "active": [_job_view(j, src) for j in active], "done": [_job_view(j, src) for j in done],
+    return {"paused": DL.paused, "limit": db.get_settings()["speed_limit"], "active": [_job_view(j, src) for j in active], "done": [_job_view(j, src) for j in done],
             "subs": [{"id": s["id"], "at": s["at"], "source": src.get(s["server"]), "server": s["server"],
                       "item": s["rating_key"], "key": s["rating_key"] if s["kind"] == "movie" else s["show_key"],
                       "kind": s["kind"], "label": s["label"], "sublabel": s["sublabel"],

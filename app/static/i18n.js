@@ -45,7 +45,7 @@ export const DICT = {
 
     'dl.title': 'Downloads', 'dl.sub': 'What Sonarr and Radarr fetch from friends through PlexArr.',
     'dl.pauseAll': 'Pause all', 'dl.resumeAll': 'Resume', 'dl.paused': 'Downloads are paused.',
-    'dl.speed': 'Speed', 'dl.active': '{n} running', 'dl.waiting': 'Waiting', 'dl.total': 'Fetched in total', 'dl.files': '{n} files', 'dl.files.one': '1 file',
+    'dl.speed': 'Speed', 'dl.active': '{n} running', 'dl.limitShort': 'limit {v}', 'dl.limited': 'Limited to {v}', 'dl.limitHelp': 'Speed limit for all downloads together, set under Settings → Downloading', 'dl.waiting': 'Waiting', 'dl.total': 'Fetched in total', 'dl.files': '{n} files', 'dl.files.one': '1 file',
     'dl.from': 'Plex server and the friend who shares it', 'dl.subBadge': 'Subtitle', 'dl.video': 'Video', 'dl.took': 'in {d}', 'dl.tookHelp': 'How long the download took and its average speed, from the first start (pauses count too)', 'dl.viaBazarr': 'via Bazarr', 'dl.subsAlong': 'Subtitles that came with the video',
     'dl.filter': 'Show', 'dl.fAll': 'All', 'dl.fVideo': 'Video', 'dl.fSubs': 'Subtitles', 'dl.noneFilter': 'Nothing here yet.',
     'dl.forced': 'forced', 'dl.hi': 'hearing impaired',
@@ -173,7 +173,7 @@ export const DICT = {
 
     'dl.title': 'Downloads', 'dl.sub': 'Wat Sonarr en Radarr via PlexArr bij vrienden ophalen.',
     'dl.pauseAll': 'Alles pauzeren', 'dl.resumeAll': 'Hervatten', 'dl.paused': 'Downloads staan op pauze.',
-    'dl.speed': 'Snelheid', 'dl.active': '{n} bezig', 'dl.waiting': 'Wachtend', 'dl.total': 'Totaal opgehaald', 'dl.files': '{n} bestanden', 'dl.files.one': '1 bestand',
+    'dl.speed': 'Snelheid', 'dl.active': '{n} bezig', 'dl.limitShort': 'limiet {v}', 'dl.limited': 'Begrensd tot {v}', 'dl.limitHelp': 'Snelheidslimiet voor alle downloads samen, in te stellen bij Instellingen → Downloaden', 'dl.waiting': 'Wachtend', 'dl.total': 'Totaal opgehaald', 'dl.files': '{n} bestanden', 'dl.files.one': '1 bestand',
     'dl.from': 'Plex-server en de vriend die hem deelt', 'dl.subBadge': 'Ondertitel', 'dl.video': 'Video', 'dl.took': 'in {d}', 'dl.tookHelp': 'Hoe lang de download duurde en de gemiddelde snelheid, vanaf de eerste start (pauzes tellen mee)', 'dl.viaBazarr': 'via Bazarr', 'dl.subsAlong': 'Ondertitels die met de video meekwamen',
     'dl.filter': 'Toon', 'dl.fAll': 'Alles', 'dl.fVideo': 'Video', 'dl.fSubs': 'Ondertitels', 'dl.noneFilter': 'Hier staat nog niets.',
     'dl.forced': 'geforceerd', 'dl.hi': 'slechthorenden',

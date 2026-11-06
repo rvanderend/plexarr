@@ -283,7 +283,11 @@ input[type=checkbox].cb { width: 18px; height: 18px; accent-color: var(--accent)
 .current { padding: 18px; display: grid; grid-template-columns: 96px 1fr; gap: 18px; margin-bottom: 22px; }
 .current .poster-sm { width: 96px; aspect-ratio: 2 / 3; border-radius: 10px; object-fit: cover; background: var(--surface-2); }
 .current h3 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
-.current .stage { display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 650; font-size: 13.5px; margin-top: 6px; }
+.current .stage { display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 650; font-size: 13.5px; margin-top: 6px; flex-wrap: wrap; }
+.current .stage .limit { font-weight: 700; }
+.limit-link { color: var(--warn); font-weight: 650; }
+.limit-link:hover { text-decoration: underline; }
+.stat.feature .limit-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .pbar { height: 12px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin: 12px 0 6px; position: relative; }
 .pbar i { display: block; height: 100%; background: var(--grad); border-radius: 99px; transition: width .8s ease; position: relative; overflow: hidden; }
 .pbar i::after {

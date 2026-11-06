@@ -465,13 +465,13 @@ async function renderDownloads(data) {
     ${d.paused ? `<div class="banner warn">${t('dl.paused')}</div>` : ''}`);
   setHtml(part('stats'), `
     <div class="stats">
-      <div class="card stat feature"><div class="label">${t('dl.speed')}</div><div class="value num">${speed ? bytes(speed) + '/s' : '–'}</div><div class="sub">${t('dl.active', { n: running.length })}</div></div>
+      <div class="card stat feature"><div class="label">${t('dl.speed')}</div><div class="value num">${speed ? bytes(speed) + '/s' : '–'}</div><div class="sub">${t('dl.active', { n: running.length })}${d.limit ? ` · <a href="#/settings" class="limit-link">${t('dl.limitShort', { v: mbps(d.limit) })}</a>` : ''}</div></div>
       <div class="card stat"><div class="label">${t('dl.waiting')}</div><div class="value num">${num(waiting.length)}</div><div class="sub">${bytes(waiting.reduce((a, j) => a + j.size - j.done, 0))}</div></div>
       <div class="card stat"><div class="label">${t('dl.total')}</div><div class="value num">${bytes(d.totals.bytes)}</div><div class="sub">${t('dl.files', { n: d.totals.count })}</div></div>
     </div>`);
   const cur = part('current');
   const curKey = running.map((j) => `${j.id}:${j.attempts}`).join(',');
-  if (cur._key === curKey) running.forEach((j) => liveProgress(cur, j));
+  if (cur._key === curKey) running.forEach((j) => liveProgress(cur, j, d.limit));
   else { cur.innerHTML = running.map(currentCard).join(''); cur._key = curKey; }
   setHtml(part('queue'), waiting.length ? `<div class="section-title">${t('dl.queue')}</div><div class="card qlist">${waiting.map(queueRow).join('')}</div>` : '');
   setHtml(part('history'), `
@@ -493,8 +493,11 @@ async function downloadsClick(e) {
   await post(`/api/downloads/${b.dataset.id}/${b.dataset.act}`);
   renderDownloads();
 }
+// The speed limit as people type it: "5 MB/s", "0,5 MB/s".
+const mbps = (v) => `${num(v, v % 1 ? 1 : 0)} MB/s`;
+const limitLabel = (limit) => `<span class="badge warn limit" data-live="limit" ${limit ? '' : 'hidden'} title="${t('dl.limitHelp')}">${t('dl.limited', { v: mbps(limit || 0) })}</span>`;
 // Updates the numbers of a running download in place.
-function liveProgress(el, j) {
+function liveProgress(el, j, limit) {
   const card = el.querySelector(`[data-job="${j.id}"]`);
   if (!card) return;
   const pct = j.size ? (j.done / j.size) * 100 : 0;
@@ -504,6 +507,8 @@ function liveProgress(el, j) {
   set('done', `${bytes(j.done)} / ${bytes(j.size)}`);
   set('speed', j.speed ? bytes(j.speed) + '/s' : '–');
   set('eta', j.eta != null ? dur(j.eta) : '–');
+  const lim = card.querySelector('[data-live="limit"]');
+  if (lim) { lim.hidden = !limit; set('limit', t('dl.limited', { v: mbps(limit || 0) })); }
 }
 // Where it comes from: the friend's Plex server and the friend who shares it.
 const source = (x) => {
@@ -521,7 +526,7 @@ function currentCard(j) {
       <h3>${esc(j.label)}</h3>
       <div class="muted" style="font-size:13.5px">${esc(j.sublabel || '')}</div>
       ${j.source ? `<div class="muted" style="font-size:13px;margin-top:4px">${source(j)}</div>` : ''}
-      <div class="stage">${I.download} ${t('job.Downloading')}${j.attempts ? ` · ${t('dl.retry', { n: j.attempts })}` : ''}</div>
+      <div class="stage">${I.download} ${t('job.Downloading')}${j.attempts ? ` · ${t('dl.retry', { n: j.attempts })}` : ''} ${limitLabel(S.dl?.limit)}</div>
       <div class="pbar"><i data-live="bar" style="width:${pct.toFixed(1)}%"></i></div>
       <div class="metrics">
         <div class="metric"><div class="label">${t('dl.progress')}</div><div class="value num" data-live="pct">${num(pct, 1)}%</div></div>
