@@ -53,6 +53,7 @@ async def _refresh_loop():
 @asynccontextmanager
 async def lifespan(_app):
     db.conn()
+    db.requeue_interrupted()
     auth.api_key()
     config.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     tasks = [asyncio.create_task(_refresh_loop()), asyncio.create_task(DL.run()), asyncio.create_task(sweep.loop())]

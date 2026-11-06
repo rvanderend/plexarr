@@ -87,9 +87,13 @@ def conn() -> sqlite3.Connection:
         if "rating_key" not in {r["name"] for r in _conn.execute("PRAGMA table_info(subs)")}:
             _conn.execute("ALTER TABLE subs ADD COLUMN rating_key TEXT")
             _conn.execute("ALTER TABLE subs ADD COLUMN show_key TEXT")
-        # Downloads that were running when the service stopped continue where they were.
-        _conn.execute("UPDATE jobs SET status='Queued' WHERE status='Downloading'")
     return _conn
+
+
+def requeue_interrupted():
+    """At startup: downloads that were running when the service stopped continue where they were. Only the
+    service itself calls this; another process opening the database must not touch a running download."""
+    x("UPDATE jobs SET status='Queued' WHERE status='Downloading'")
 
 
 def q(sql: str, args=()) -> list[sqlite3.Row]:
