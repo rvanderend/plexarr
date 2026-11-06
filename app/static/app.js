@@ -1,5 +1,5 @@
 // PlexArr web UI (no build step): the friends' library, detail panel, downloads, activity, login and routing.
-import { $, $$, esc, store, t, bytes, dur, num, when, collate, I, api, post, toast, events } from './util.js';
+import { $, $$, esc, store, t, bytes, dur, num, when, collate, I, api, post, toast, events, lang } from './util.js';
 import { renderSettings } from './settings.js';
 import { renderWizard } from './wizard.js';
 
@@ -524,13 +524,21 @@ async function renderActivity() {
   const v = $('#view');
   v.innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
   const ev = await api('/api/events?limit=300');
-  const cls = { done: 'good', failed: 'bad', grab: 'accent', search: '', sweep: 'warn', request: 'accent', setup: '' };
+  const cls = { done: 'good', failed: 'bad', grab: 'accent', search: '', sweep: 'warn', request: 'accent', setup: '', subtitles: '' };
   v.innerHTML = `
     <h1 class="page">${t('act.title')}</h1><p class="page-sub">${t('act.sub')}</p>
     ${ev.length ? `<div class="card">${ev.map((e) => { const [line, sub] = eventText(e); return `<div class="hrow">
       <div style="min-width:0"><div class="t" style="font-weight:550">${esc(line)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ''}</div>
       <div class="r"><span class="badge ${cls[e.kind] ?? ''}">${t('ev.' + e.kind)}</span><br><span class="muted">${when(e.at)}</span></div>
     </div>`; }).join('')}</div>` : `<div class="empty">${I.activity}<p>${t('act.none')}</p></div>`}`;
+}
+
+// Bazarr's language names ("dutch", "brazilian_portuguese") in the UI language, where the browser knows them.
+const LANG_CODES = { dutch: 'nl', english: 'en', german: 'de', french: 'fr', spanish: 'es', italian: 'it', portuguese: 'pt',
+  brazilian_portuguese: 'pt-BR', danish: 'da', swedish: 'sv', norwegian: 'no', finnish: 'fi', polish: 'pl', turkish: 'tr' };
+function langName(l) {
+  try { if (LANG_CODES[l]) return new Intl.DisplayNames([lang()], { type: 'language' }).of(LANG_CODES[l]); } catch { /* old browser */ }
+  return (l || '').replace(/[_-]/g, ' ');
 }
 
 // [line, explanation] in the UI language. Lines logged before events carried data only have their English text.
@@ -553,6 +561,7 @@ function eventText(e) {
     case 'failed': return [t('evt.failed', d), d.msg];
     case 'done': return [t('evt.done', { what: d.what, size: bytes(d.size) }), ''];
     case 'setup': return [t(d.active ? 'evt.setup' : 'evt.setupOff', d), ''];
+    case 'subtitles': return [t(d.found ? 'evt.subs' : 'evt.subsNone', { what: d.what, n: d.found, lang: langName(d.lang) }), ''];
     default: return [e.text, ''];
   }
 }

@@ -20,6 +20,7 @@
 - **Downloads like a download client.** Sonarr/Radarr send the release to PlexArr as if it were SABnzbd. PlexArr downloads the original file from the friend's server (Plex's own download: resumable, optionally throttled), adds external subtitles, and puts it in the download folder. Sonarr/Radarr import it as usual.
 - **Keeps Usenet first.** In *fallback* mode (the default) PlexArr only offers a release when a Usenet download failed, when the item has been missing for a while (24 hours by default), or when you fetch it yourself. *Auto search* (optional) asks Sonarr/Radarr every hour to search a few missing items a friend has. *Equal* mode offers everything and lets Sonarr/Radarr choose.
 - **Shows the friends' libraries** with what you already have, what you lack, and what they have in better quality, with a button to fetch a movie or the missing episodes of a season.
+- **Subtitles for Bazarr.** Bazarr can search the external subtitles on the friends' servers as a subtitle provider, next to OpenSubtitles and the rest.
 - **Sets itself up in Sonarr and Radarr** with one click: an indexer and a download client, linked to each other.
 - A setup wizard with *Sign in with Plex*, an activity log that explains why something was or wasn't offered, English and Dutch, light and dark, works well on a phone.
 
@@ -91,6 +92,12 @@ Everything else is set in the web UI.
 ### By hand, or with Prowlarr
 
 Settings → *Link with Sonarr & Radarr* → *By hand* shows the details: a **Newznab** indexer with URL `http://plexarr:8080`, API path `/newznab/api` and the API key from that page, and a **SABnzbd** download client with host `plexarr`, port `8080`, URL base `sabnzbd` and the same API key. Give the indexer the PlexArr download client, so its releases don't go to your Usenet client (and the other way round).
+
+### Bazarr
+
+PlexArr also answers as a *Subsarr* server, a provider that Bazarr has built in. In Bazarr: Settings → Providers → **Subsarr**, with as base URL `http://plexarr:8080/subsarr/<API key>` (Settings → *Link with Sonarr & Radarr* shows the whole URL with a copy button). Bazarr sends no API key of its own, so the key is part of the URL; a new API key in PlexArr means a new URL in Bazarr.
+
+Bazarr then searches the friends' servers by IMDb id (of the movie, or of the show for an episode), and by title when that finds nothing. Only **external text subtitles** (`.srt`, `.ass`, `.vtt`) can be offered: Plex doesn't hand out subtitles that are embedded in the video, and image subtitles (VobSub, PGS) are no use to Bazarr. Forced subtitles are left out, because Subsarr can't mark them as forced. Each result carries the file name of the friend's version, so Bazarr's score shows whether it is the same release as yours, and Bazarr's own sync can do the rest. The Activity page shows each search.
 
 ## How it works
 

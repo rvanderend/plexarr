@@ -32,6 +32,9 @@ export function plexSignIn(done) {
   return stop;
 }
 
+// The base URL for Bazarr's Subsarr provider: Bazarr sends no API key, so it goes in the path.
+const bazarrUrl = (s, key) => `${s.self_url || s.selfUrlDefault}/subsarr/${key}`;
+
 export async function renderSettings(S) {
   const v = $('#view');
   v.innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
@@ -71,6 +74,12 @@ export async function renderSettings(S) {
             <button class="btn sm ghost" id="copy-key">${I.copy}</button><button class="btn sm ghost" id="new-key">${I.refresh}</button></dd>
         </dl>
         <div class="form">${field('self_url', t('set.selfUrl'), s.self_url, { ph: s.selfUrlDefault, help: t('set.selfUrlHelp') })}</div>
+        <h4>Bazarr</h4><p class="help">${t('set.bazarrHelp')}</p>
+        <dl class="kv card" style="box-shadow:none">
+          <dt>Provider</dt><dd>Subsarr</dd>
+          <dt>Base URL</dt><dd class="mono"><span id="bazarr-url">${esc(bazarrUrl(s, key.key))}</span>
+            <button class="btn sm ghost" id="copy-bazarr">${I.copy}</button></dd>
+        </dl>
       </section>
 
       <section class="card" id="sec-behaviour">
@@ -171,11 +180,14 @@ export async function renderSettings(S) {
     } catch (e) { toast(e.message, 'bad'); }
     renderSettings(S);
   }));
-  $('#copy-key').onclick = () => { navigator.clipboard?.writeText(key.key).then(() => toast(t('set.copied'))); };
+  const copy = (id) => () => { navigator.clipboard?.writeText($(id).textContent).then(() => toast(t('set.copied'))); };
+  $('#copy-key').onclick = copy('#apikey');
+  $('#copy-bazarr').onclick = copy('#bazarr-url');
   $('#new-key').onclick = async () => {
     if (!confirm(t('set.newKeyConfirm'))) return;
     const r = await post('/api/apikey');
     $('#apikey').textContent = r.key;
+    $('#bazarr-url').textContent = bazarrUrl(s, r.key);
     toast(t('set.newKeyDone'));
   };
   $('#sweep-now').onclick = async () => {

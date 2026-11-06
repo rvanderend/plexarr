@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, config, db, newznab, plex, releases, sab, sweep
+from . import auth, config, db, newznab, plex, releases, sab, subsarr, sweep
 from .arr import RADARR, SONARR, ArrError
 from .downloader import DL
 from .plex import LIB
@@ -26,10 +26,11 @@ log = logging.getLogger("plexarr")
 
 
 class _HideKeys(logging.Filter):
-    """Sonarr/Radarr send the API key in the query string: keep it out of the access log."""
+    """Sonarr/Radarr send the API key in the query string, Bazarr in the path: keep it out of the access log."""
     def filter(self, record):
         if isinstance(record.args, tuple):
-            record.args = tuple(re.sub(r"(apikey=)[^&\s]+", r"\1…", a) if isinstance(a, str) else a for a in record.args)
+            record.args = tuple(re.sub(r"(apikey=|/subsarr/)[^&/\s]+", r"\1…", a) if isinstance(a, str) else a
+                                for a in record.args)
         return True
 
 
@@ -61,6 +62,7 @@ app = FastAPI(title="PlexArr", version=config.VERSION, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 app.include_router(newznab.router)
 app.include_router(sab.router)
+app.include_router(subsarr.router)
 
 PUBLIC_API = ("/api/auth/", "/api/health")
 
