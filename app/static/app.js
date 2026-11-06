@@ -436,10 +436,13 @@ async function fetchItem(btn) {
 // ==================================================================================================
 // Downloads
 // ==================================================================================================
-async function renderDownloads() {
+// The page is updated every few seconds while it is open. Only the parts that changed are replaced, and a
+// running download only gets its numbers updated, so posters aren't loaded again (that made the page flicker).
+async function renderDownloads(data) {
   const v = $('#view');
-  if (!S.dl) v.innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
-  try { S.dl = await api('/api/downloads'); } catch (e) { v.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  let root = $('#dl', v);
+  if (!root && !S.dl) v.innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
+  try { S.dl = data || await api('/api/downloads'); } catch (e) { if (!root) v.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   const d = S.dl;
   const running = d.active.filter((j) => j.status === 'Downloading');
   const waiting = d.active.filter((j) => j.status !== 'Downloading');
@@ -447,32 +450,60 @@ async function renderDownloads() {
   const filter = store.get('dlFilter', 'all');
   const groups = historyGroups(d, filter);
   const counts = { all: d.done.length + (d.subs || []).length, video: d.done.length, sub: (d.subs || []).length };
-  v.innerHTML = `
+  if (!root) {
+    v.innerHTML = '<div id="dl"><div data-part="head"></div><div data-part="stats"></div><div data-part="current"></div><div data-part="queue"></div><div data-part="history"></div></div>';
+    root = $('#dl', v);
+    root.addEventListener('click', downloadsClick);
+  }
+  const part = (name) => $(`[data-part="${name}"]`, root);
+  setHtml(part('head'), `
     <div class="toolbar">
       <div><h1 class="page">${t('dl.title')}</h1><p class="page-sub" style="margin:0">${t('dl.sub')}</p></div>
       <span class="spacer"></span>
-      <button class="btn" id="pause-btn">${d.paused ? I.play : I.pause} ${d.paused ? t('dl.resumeAll') : t('dl.pauseAll')}</button>
+      <button class="btn" data-pause="${d.paused ? 0 : 1}">${d.paused ? I.play : I.pause} ${d.paused ? t('dl.resumeAll') : t('dl.pauseAll')}</button>
     </div>
-    ${d.paused ? `<div class="banner warn">${t('dl.paused')}</div>` : ''}
+    ${d.paused ? `<div class="banner warn">${t('dl.paused')}</div>` : ''}`);
+  setHtml(part('stats'), `
     <div class="stats">
       <div class="card stat feature"><div class="label">${t('dl.speed')}</div><div class="value num">${speed ? bytes(speed) + '/s' : '–'}</div><div class="sub">${t('dl.active', { n: running.length })}</div></div>
       <div class="card stat"><div class="label">${t('dl.waiting')}</div><div class="value num">${num(waiting.length)}</div><div class="sub">${bytes(waiting.reduce((a, j) => a + j.size - j.done, 0))}</div></div>
       <div class="card stat"><div class="label">${t('dl.total')}</div><div class="value num">${bytes(d.totals.bytes)}</div><div class="sub">${t('dl.files', { n: d.totals.count })}</div></div>
-    </div>
-    ${running.map(currentCard).join('')}
-    ${waiting.length ? `<div class="section-title">${t('dl.queue')}</div><div class="card qlist">${waiting.map(queueRow).join('')}</div>` : ''}
+    </div>`);
+  const cur = part('current');
+  const curKey = running.map((j) => `${j.id}:${j.attempts}`).join(',');
+  if (cur._key === curKey) running.forEach((j) => liveProgress(cur, j));
+  else { cur.innerHTML = running.map(currentCard).join(''); cur._key = curKey; }
+  setHtml(part('queue'), waiting.length ? `<div class="section-title">${t('dl.queue')}</div><div class="card qlist">${waiting.map(queueRow).join('')}</div>` : '');
+  setHtml(part('history'), `
     <div class="section-title hist-title"><span>${t('dl.history')}</span>
       <div class="seg hfilter" role="group" aria-label="${t('dl.filter')}">${[['all', t('dl.fAll')], ['video', t('dl.fVideo')], ['sub', t('dl.fSubs')]]
         .map(([k, l]) => `<button type="button" data-filter="${k}" class="${filter === k ? 'on' : ''}" aria-pressed="${filter === k}">${l} <span class="n num">${counts[k]}</span></button>`).join('')}</div></div>
     ${groups.length ? `<div class="card">${groups.map(historyGroup).join('')}</div>`
-      : `<div class="empty">${I.inbox}<p>${counts.all ? t('dl.noneFilter') : t('dl.none')}</p></div>`}`;
-  v.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { store.set('dlFilter', b.dataset.filter); renderDownloads(); }));
-  $('#pause-btn').onclick = async () => { await post('/api/pause', { paused: !d.paused }); renderDownloads(); };
-  v.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', async () => {
-    if (b.dataset.act === 'delete' && !confirm(t('dl.confirmDelete'))) return;
-    await post(`/api/downloads/${b.dataset.id}/${b.dataset.act}`);
-    renderDownloads();
-  }));
+      : `<div class="empty">${I.inbox}<p>${counts.all ? t('dl.noneFilter') : t('dl.none')}</p></div>`}`);
+}
+const setHtml = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; } };
+async function downloadsClick(e) {
+  const f = e.target.closest('[data-filter]');
+  if (f) { store.set('dlFilter', f.dataset.filter); renderDownloads(S.dl); return; }
+  const p = e.target.closest('[data-pause]');
+  if (p) { await post('/api/pause', { paused: p.dataset.pause === '1' }); renderDownloads(); return; }
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  if (b.dataset.act === 'delete' && !confirm(t('dl.confirmDelete'))) return;
+  await post(`/api/downloads/${b.dataset.id}/${b.dataset.act}`);
+  renderDownloads();
+}
+// Updates the numbers of a running download in place.
+function liveProgress(el, j) {
+  const card = el.querySelector(`[data-job="${j.id}"]`);
+  if (!card) return;
+  const pct = j.size ? (j.done / j.size) * 100 : 0;
+  const set = (k, text) => { const x = card.querySelector(`[data-live="${k}"]`); if (x && x.textContent !== text) x.textContent = text; };
+  card.querySelector('[data-live="bar"]').style.width = pct.toFixed(1) + '%';
+  set('pct', num(pct, 1) + '%');
+  set('done', `${bytes(j.done)} / ${bytes(j.size)}`);
+  set('speed', j.speed ? bytes(j.speed) + '/s' : '–');
+  set('eta', j.eta != null ? dur(j.eta) : '–');
 }
 // Where it comes from: the friend's Plex server and the friend who shares it.
 const source = (x) => {
@@ -484,19 +515,19 @@ const source = (x) => {
 const jobPoster = (j) => (j.key ? `/api/poster/${j.server}/${j.key}?w=300` : '');
 function currentCard(j) {
   const pct = j.size ? (j.done / j.size) * 100 : 0;
-  return `<div class="card current">
+  return `<div class="card current" data-job="${j.id}">
     <img class="poster-sm" src="${jobPoster(j)}" alt="" onerror="this.style.visibility='hidden'">
     <div style="min-width:0">
       <h3>${esc(j.label)}</h3>
       <div class="muted" style="font-size:13.5px">${esc(j.sublabel || '')}</div>
       ${j.source ? `<div class="muted" style="font-size:13px;margin-top:4px">${source(j)}</div>` : ''}
       <div class="stage">${I.download} ${t('job.Downloading')}${j.attempts ? ` · ${t('dl.retry', { n: j.attempts })}` : ''}</div>
-      <div class="pbar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="pbar"><i data-live="bar" style="width:${pct.toFixed(1)}%"></i></div>
       <div class="metrics">
-        <div class="metric"><div class="label">${t('dl.progress')}</div><div class="value num">${num(pct, 1)}%</div></div>
-        <div class="metric"><div class="label">${t('dl.done')}</div><div class="value num">${bytes(j.done)} / ${bytes(j.size)}</div></div>
-        <div class="metric"><div class="label">${t('dl.speed')}</div><div class="value num">${j.speed ? bytes(j.speed) + '/s' : '–'}</div></div>
-        <div class="metric"><div class="label">${t('dl.eta')}</div><div class="value num">${j.eta != null ? dur(j.eta) : '–'}</div></div>
+        <div class="metric"><div class="label">${t('dl.progress')}</div><div class="value num" data-live="pct">${num(pct, 1)}%</div></div>
+        <div class="metric"><div class="label">${t('dl.done')}</div><div class="value num" data-live="done">${bytes(j.done)} / ${bytes(j.size)}</div></div>
+        <div class="metric"><div class="label">${t('dl.speed')}</div><div class="value num" data-live="speed">${j.speed ? bytes(j.speed) + '/s' : '–'}</div></div>
+        <div class="metric"><div class="label">${t('dl.eta')}</div><div class="value num" data-live="eta">${j.eta != null ? dur(j.eta) : '–'}</div></div>
       </div>
       <div class="mono muted" style="margin-top:10px">${esc(j.name)}</div>
       <div class="actions">
@@ -642,7 +673,7 @@ async function poll() {
       mp.hidden = false;
       mp.innerHTML = `${I.download}<div class="bar"><i style="width:${((done / size) * 100).toFixed(1)}%"></i></div><span class="txt num">${speed ? bytes(speed) + '/s' : ''}</span>`;
     } else mp.hidden = true;
-    if (S.route === 'downloads' && !document.hidden) { S.dl = dl; renderDownloads(); }
+    if (S.route === 'downloads' && !document.hidden) renderDownloads(dl);
   } catch { /* offline: try again later */ }
 }
 $('#mini-progress').addEventListener('click', () => { location.hash = '#/downloads'; });
