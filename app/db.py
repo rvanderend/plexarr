@@ -47,7 +47,16 @@ CREATE TABLE IF NOT EXISTS jobs (
     storage TEXT DEFAULT '',
     attempts INTEGER DEFAULT 0,
     created REAL NOT NULL, started REAL, finished REAL,
-    removed INTEGER DEFAULT 0      -- removed from the history by Sonarr/Radarr (kept for the log)
+    removed INTEGER DEFAULT 0,     -- removed from the history by Sonarr/Radarr (kept for the log)
+    subs TEXT                      -- JSON: the subtitles fetched along, [{"lang": "nl", "forced": false}]
+);
+-- Subtitles Bazarr fetched through PlexArr (the Subsarr API).
+CREATE TABLE IF NOT EXISTS subs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at REAL NOT NULL,
+    server TEXT NOT NULL, part_id INTEGER, stream_id INTEGER NOT NULL,
+    kind TEXT, label TEXT NOT NULL, sublabel TEXT DEFAULT '',
+    lang TEXT, hi INTEGER DEFAULT 0, ext TEXT, size INTEGER
 );
 CREATE TABLE IF NOT EXISTS requests (
     key TEXT PRIMARY KEY,          -- movie:<tmdb> | episode:<tvdb>:<season>:<episode>
@@ -72,6 +81,8 @@ def conn() -> sqlite3.Connection:
         _conn.executescript(SCHEMA)
         if "data" not in {r["name"] for r in _conn.execute("PRAGMA table_info(events)")}:
             _conn.execute("ALTER TABLE events ADD COLUMN data TEXT")
+        if "subs" not in {r["name"] for r in _conn.execute("PRAGMA table_info(jobs)")}:
+            _conn.execute("ALTER TABLE jobs ADD COLUMN subs TEXT")
         # Downloads that were running when the service stopped continue where they were.
         _conn.execute("UPDATE jobs SET status='Queued' WHERE status='Downloading'")
     return _conn

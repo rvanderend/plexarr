@@ -444,6 +444,9 @@ async function renderDownloads() {
   const running = d.active.filter((j) => j.status === 'Downloading');
   const waiting = d.active.filter((j) => j.status !== 'Downloading');
   const speed = running.reduce((a, j) => a + j.speed, 0);
+  // Downloads and the subtitles Bazarr fetched, newest first.
+  const history = [...d.done.map((j) => ({ at: j.finished || j.created, job: j })), ...(d.subs || []).map((x) => ({ at: x.at, sub: x }))]
+    .sort((a, b) => b.at - a.at);
   v.innerHTML = `
     <div class="toolbar">
       <div><h1 class="page">${t('dl.title')}</h1><p class="page-sub" style="margin:0">${t('dl.sub')}</p></div>
@@ -459,7 +462,7 @@ async function renderDownloads() {
     ${running.map(currentCard).join('')}
     ${waiting.length ? `<div class="section-title">${t('dl.queue')}</div><div class="card qlist">${waiting.map(queueRow).join('')}</div>` : ''}
     <div class="section-title">${t('dl.history')}</div>
-    ${d.done.length ? `<div class="card">${d.done.map(historyRow).join('')}</div>` : `<div class="empty">${I.inbox}<p>${t('dl.none')}</p></div>`}`;
+    ${history.length ? `<div class="card">${history.map((h) => (h.sub ? subRow(h.sub) : historyRow(h.job))).join('')}</div>` : `<div class="empty">${I.inbox}<p>${t('dl.none')}</p></div>`}`;
   $('#pause-btn').onclick = async () => { await post('/api/pause', { paused: !d.paused }); renderDownloads(); };
   v.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', async () => {
     if (b.dataset.act === 'delete' && !confirm(t('dl.confirmDelete'))) return;
@@ -511,9 +514,19 @@ function historyRow(j) {
     <div style="min-width:0"><div class="t">${esc(j.label)} <span class="muted">${esc(j.sublabel || '')}</span></div>
       <div class="s mono">${esc(j.name)}</div>
       ${j.status === 'Failed' ? `<div class="s" style="color:var(--bad)">${esc(j.message)}</div>` : ''}
-      ${j.status === 'Completed' ? `<div class="s">${j.removed ? t('dl.imported') : t('dl.waitImport')}</div>` : ''}</div>
+      ${j.status === 'Completed' ? `<div class="s">${j.removed ? t('dl.imported') : t('dl.waitImport')}</div>` : ''}
+      ${j.subs?.length ? `<div class="s">${t('dl.withSubs', { langs: j.subs.map((x) => langName(x.lang) + (x.forced ? ` (${t('dl.forced')})` : '')).join(', ') })}</div>` : ''}</div>
     <div class="r"><span class="badge ${cls}">${t('job.' + j.status)}</span><br>${bytes(j.size)}${took ? ` · ${dur(took)}` : ''}<br><span class="muted">${when(j.finished)}</span>
       ${j.status === 'Failed' ? `<br><button class="btn sm" data-act="retry" data-id="${j.id}" style="margin-top:6px">${I.retry} ${t('dl.retryBtn')}</button>` : ''}</div>
+  </div>`;
+}
+
+function subRow(x) {
+  const what = langName(x.lang) + (x.hi ? ` (${t('dl.hi')})` : '');
+  return `<div class="hrow">
+    <div style="min-width:0"><div class="t">${esc(x.label)} <span class="muted">${esc(x.sublabel || '')}</span></div>
+      <div class="s">${t('dl.subVia', { lang: what })}</div></div>
+    <div class="r"><span class="badge accent">${t('dl.subBadge')}</span><br>${bytes(x.size || 0)}${x.ext ? ` · ${esc(x.ext)}` : ''}<br><span class="muted">${when(x.at)}</span></div>
   </div>`;
 }
 
@@ -533,11 +546,12 @@ async function renderActivity() {
     </div>`; }).join('')}</div>` : `<div class="empty">${I.activity}<p>${t('act.none')}</p></div>`}`;
 }
 
-// Bazarr's language names ("dutch", "brazilian_portuguese") in the UI language, where the browser knows them.
+// A language tag ("nl", "pt-BR") or one of Bazarr's names ("dutch") in the UI language, where the browser knows it.
 const LANG_CODES = { dutch: 'nl', english: 'en', german: 'de', french: 'fr', spanish: 'es', italian: 'it', portuguese: 'pt',
   brazilian_portuguese: 'pt-BR', danish: 'da', swedish: 'sv', norwegian: 'no', finnish: 'fi', polish: 'pl', turkish: 'tr' };
 function langName(l) {
-  try { if (LANG_CODES[l]) return new Intl.DisplayNames([lang()], { type: 'language' }).of(LANG_CODES[l]); } catch { /* old browser */ }
+  const code = LANG_CODES[l] || (/^[a-z]{2,3}(-[A-Za-z0-9]+)*$/.test(l || '') ? l : null);
+  try { if (code) return new Intl.DisplayNames([lang()], { type: 'language' }).of(code); } catch { /* old browser, odd tag */ }
   return (l || '').replace(/[_-]/g, ' ');
 }
 

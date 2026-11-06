@@ -14,12 +14,14 @@ import logging
 import re
 import time
 
+from urllib.parse import urlencode
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
 from . import auth, config, db, plex, releases
-from .downloader import SUB_EXT
+from .downloader import SUB_EXT, labels
 from .plex import LIB
 
 log = logging.getLogger("plexarr.subsarr")
@@ -131,7 +133,8 @@ async def _items(row, lang: str, base: str) -> list[dict]:
         ext = SUB_EXT[s["codec"].lower()]
         hi = bool(s.get("hearingImpaired"))
         out.append({"id": f"plexarr-{row['server']}-{s['id']}", "language": lang, "hi": hi,
-                    "download_url": f"{base}/api/v1/download/{row['server']}/{s['id']}.{ext}",
+                    "download_url": f"{base}/api/v1/download/{row['server']}/{row['part_id']}/{s['id']}.{ext}"
+                                    f"?{urlencode({'lang': s.get('languageTag') or lang, 'hi': int(hi)})}",
                     "title": row["title"], "releases": [stem],
                     "filename": f"{stem}.{s.get('languageTag') or lang}{'.hi' if hi else ''}.{ext}"})
     return out
@@ -166,10 +169,30 @@ async def search(key: str, request: Request):
     return JSONResponse({"items": items, "total": len(items)})
 
 
-@router.get("/subsarr/{key}/api/v1/download/{server}/{stream_id}.{ext}")
-async def download(key: str, server: str, stream_id: int, ext: str):
+@router.get("/subsarr/{key}/api/v1/download/{server}/{part_id}/{stream_id}.{ext}")
+async def download(key: str, server: str, part_id: int, stream_id: int, ext: str, lang: str = "", hi: int = 0):
     if not _key_ok(key):
         raise HTTPException(401, "Incorrect API key")
+    content = await _fetch(server, stream_id)
+    row = db.q1("SELECT * FROM releases WHERE server=? AND part_id=?", (server, part_id))
+    if row:
+        label, sub = labels(row)
+        db.x("INSERT INTO subs(at, server, part_id, stream_id, kind, label, sublabel, lang, hi, ext, size) "
+             "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+             (time.time(), server, part_id, stream_id, row["kind"], label, sub, lang, int(bool(hi)), ext, len(content)))
+        db.x("DELETE FROM subs WHERE id <= (SELECT MAX(id) - 1000 FROM subs)")
+    return _file(content, stream_id, ext)
+
+
+@router.get("/subsarr/{key}/api/v1/download/{server}/{stream_id}.{ext}")
+async def download_v1(key: str, server: str, stream_id: int, ext: str):
+    """The links PlexArr 0.3.0 handed out (without the file): still work, but don't show up under Downloads."""
+    if not _key_ok(key):
+        raise HTTPException(401, "Incorrect API key")
+    return _file(await _fetch(server, stream_id), stream_id, ext)
+
+
+async def _fetch(server: str, stream_id: int) -> bytes:
     try:
         srv = await LIB.server(server)
         await srv.connect()
@@ -179,5 +202,9 @@ async def download(key: str, server: str, stream_id: int, ext: str):
         raise HTTPException(502, str(e))
     if r.status_code != 200 or not r.content:
         raise HTTPException(404 if r.status_code in (200, 404) else 502, f"Plex answered {r.status_code}")
-    return Response(r.content, media_type="application/octet-stream",
+    return r.content
+
+
+def _file(content: bytes, stream_id: int, ext: str) -> Response:
+    return Response(content, media_type="application/octet-stream",
                     headers={"Content-Disposition": f'attachment; filename="{stream_id}.{ext}"'})

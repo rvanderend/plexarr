@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Downloads shows subtitles:** the subtitles Bazarr fetched through PlexArr appear in the history (with the movie or episode and the language), and a download lists the subtitles that came along with it.
 - The settings section *Link with Sonarr & Radarr* is now called *Link with Sonarr, Radarr & Bazarr*, and its texts mention Bazarr (the address field, and what to change after a new API key).
 
 ## 0.3.0

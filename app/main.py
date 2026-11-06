@@ -459,7 +459,7 @@ def _job_view(j) -> dict:
             "category": j["category"], "status": j["status"], "size": j["size"], "done": pr["done"],
             "speed": pr["speed"], "eta": pr["eta"], "message": j["fail_message"], "created": j["created"],
             "started": j["started"], "finished": j["finished"], "removed": bool(j["removed"]),
-            "attempts": j["attempts"]}
+            "attempts": j["attempts"], "subs": json.loads(j["subs"]) if j["subs"] else []}
 
 
 @app.get("/api/downloads")
@@ -467,7 +467,10 @@ async def downloads():
     active = db.q("SELECT * FROM jobs WHERE status IN ('Queued','Downloading','Paused') ORDER BY created")
     done = db.q("SELECT * FROM jobs WHERE status IN ('Completed','Failed','Deleted') ORDER BY finished DESC LIMIT 200")
     total = db.q1("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS b FROM jobs WHERE status='Completed'")
+    subs = db.q("SELECT * FROM subs ORDER BY at DESC LIMIT 200")
     return {"paused": DL.paused, "active": [_job_view(j) for j in active], "done": [_job_view(j) for j in done],
+            "subs": [{"id": s["id"], "at": s["at"], "kind": s["kind"], "label": s["label"], "sublabel": s["sublabel"],
+                      "lang": s["lang"], "hi": bool(s["hi"]), "ext": s["ext"], "size": s["size"]} for s in subs],
             "totals": {"count": total["n"], "bytes": total["b"]}}
 
 

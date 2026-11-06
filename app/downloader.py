@@ -1,5 +1,6 @@
 """Downloads files from a friend's Plex server: resumable, optionally throttled, with external subtitles."""
 import asyncio
+import json
 import logging
 import os
 import re
@@ -43,10 +44,7 @@ class Downloader:
         r = db.q1("SELECT * FROM releases WHERE server=? AND part_id=?", (server, part_id))
         if not r:
             raise LookupError("This file is no longer on the Plex server")
-        if r["kind"] == "movie":
-            label, sub = (f"{r['title']} ({r['year']})" if r["year"] else r["title"]), ""
-        else:
-            label, sub = r["title"], f"S{r['season']:02d}E{r['episode']:02d} · {r['episode_title'] or ''}".rstrip(" ·")
+        label, sub = labels(r)
         nzo = config.NZO_PREFIX + secrets.token_hex(6)
         db.x("INSERT INTO jobs(nzo_id, server, part_id, name, category, kind, label, sublabel, rating_key, show_key, "
              "size, status, created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -167,7 +165,8 @@ class Downloader:
 
         if db.get_settings()["subtitles"]:
             try:
-                await self._subtitles(job, target)
+                subs = await self._subtitles(job, target)
+                db.x("UPDATE jobs SET subs=? WHERE nzo_id=?", (json.dumps(subs) if subs else None, nzo))
             except Exception as e:  # noqa: BLE001 - subtitles are a bonus
                 log.warning("subtitles %s: %s", job["name"], e)
 
@@ -239,13 +238,14 @@ class Downloader:
                             last_db = now
         db.x("UPDATE jobs SET done=? WHERE nzo_id=?", (done, nzo))
 
-    async def _subtitles(self, job, target: Path):
+    async def _subtitles(self, job, target: Path) -> list[dict]:
+        """Saves the external subtitles next to the video; returns what was saved."""
         srv = await LIB.server(job["server"])
         md = (await srv.get(f"/library/metadata/{job['rating_key']}")).get("Metadata", [{}])[0]
         part = next((p for m in md.get("Media", []) for p in m.get("Part", []) if p.get("id") == job["part_id"]), None)
         if not part:
-            return
-        seen = set()
+            return []
+        seen, saved = set(), []
         async with httpx.AsyncClient(timeout=60) as c:
             for s in part.get("Stream", []):
                 ext = SUB_EXT.get((s.get("codec") or "").lower())
@@ -260,6 +260,8 @@ class Downloader:
                 resp = await c.get(srv.url(s["key"]), headers=plex.headers(srv.token))
                 if resp.status_code == 200 and resp.content:
                     (target.parent / f"{n}.{ext}").write_bytes(resp.content)
+                    saved.append({"lang": lang, "forced": bool(s.get("forced"))})
+        return saved
 
     # --- for the web UI and the SABnzbd API ------------------------------------------------------
     def progress(self, job) -> dict:
@@ -268,6 +270,13 @@ class Downloader:
         speed = live.get("speed", 0.0)
         left = max(0, job["size"] - done)
         return {"done": done, "speed": speed, "left": left, "eta": (left / speed) if speed > 0 else None}
+
+
+def labels(r) -> tuple[str, str]:
+    """(label, sublabel) of an index row: "Title (year)" for a movie, the show and "S01E02 · title" for an episode."""
+    if r["kind"] == "movie":
+        return (f"{r['title']} ({r['year']})" if r["year"] else r["title"]), ""
+    return r["title"], f"S{r['season']:02d}E{r['episode']:02d} · {r['episode_title'] or ''}".rstrip(" ·")
 
 
 def safe_name(name: str) -> str:
